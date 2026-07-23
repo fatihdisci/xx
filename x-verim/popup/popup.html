@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>X Verim</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main class="xverim-popup">
+    <header class="xverim-popup-header">
+      <svg class="xverim-logo" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <circle cx="12" cy="12" r="11" fill="#1d9bf0" />
+        <path d="M7 7 L17 17 M17 7 L7 17" stroke="#fff" stroke-width="2.4" stroke-linecap="round" />
+      </svg>
+      <span class="xverim-popup-title">X Verim</span>
+      <span class="xverim-popup-tag">personal</span>
+    </header>
+
+    <section class="xverim-card" data-card="filters">
+      <label class="xverim-toggle">
+        <input type="checkbox" id="filter-enabled" />
+        <span>Niche filter on</span>
+      </label>
+      <p class="xverim-card-hint" id="filter-hint">Synced with the content-script toggle.</p>
+    </section>
+
+    <section class="xverim-card" data-card="suggest">
+      <div class="xverim-card-label">Post ideas</div>
+      <input type="text" id="suggest-topic" placeholder="Topic — leave empty to use your niche" />
+      <div class="xverim-row">
+        <label class="xverim-field">
+          <span class="xverim-field-label">How many</span>
+          <input type="number" id="suggest-count" min="1" max="10" value="5" />
+        </label>
+        <label class="xverim-field xverim-field-grow">
+          <span class="xverim-field-label">Angle</span>
+          <select id="suggest-style">
+            <option value="mixed">Mixed</option>
+            <option value="opinion">Opinion / hot take</option>
+            <option value="lesson">Lesson learned</option>
+            <option value="question">Question to the timeline</option>
+            <option value="story">Short story / moment</option>
+            <option value="observation">Observation</option>
+          </select>
+        </label>
+        <button class="xverim-btn primary" id="suggest-go" type="button">Generate</button>
+      </div>
+      <div class="xverim-result" id="suggest-result"></div>
+    </section>
+
+    <section class="xverim-card" data-card="counters">
+      <div class="xverim-counter-row">
+        <span class="xverim-counter"><b id="cnt-likes">0</b> likes / hr</span>
+        <span class="xverim-counter"><b id="cnt-follows">0</b> follows / hr</span>
+      </div>
+    </section>
+
+    <footer class="xverim-popup-footer">
+      <span>Reply drafts live on the timeline — focus a tweet and press <b>a</b></span>
+    </footer>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

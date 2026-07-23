@@ -1,0 +1,625 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AAEFC62A300E381F00FC50EB /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAEFC629300E381F00FC50EB /* AppDelegate.swift */; };
+		AAEFC62E300E381F00FC50EB /* Main.html in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC62C300E381F00FC50EB /* Main.html */; };
+		AAEFC630300E381F00FC50EB /* Icon.png in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC62F300E381F00FC50EB /* Icon.png */; };
+		AAEFC632300E381F00FC50EB /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC631300E381F00FC50EB /* Style.css */; };
+		AAEFC634300E381F00FC50EB /* Script.js in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC633300E381F00FC50EB /* Script.js */; };
+		AAEFC636300E381F00FC50EB /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAEFC635300E381F00FC50EB /* ViewController.swift */; };
+		AAEFC639300E381F00FC50EB /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC637300E381F00FC50EB /* Main.storyboard */; };
+		AAEFC63B300E382000FC50EB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC63A300E382000FC50EB /* Assets.xcassets */; };
+		AAEFC642300E382000FC50EB /* X Verim Extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAEFC641300E382000FC50EB /* X Verim Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AAEFC647300E382000FC50EB /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAEFC646300E382000FC50EB /* SafariWebExtensionHandler.swift */; };
+		AAEFC65B300E382000FC50EB /* popup in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC653300E382000FC50EB /* popup */; };
+		AAEFC65C300E382000FC50EB /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC654300E382000FC50EB /* background.js */; };
+		AAEFC65D300E382000FC50EB /* content in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC655300E382000FC50EB /* content */; };
+		AAEFC65E300E382000FC50EB /* config.js in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC656300E382000FC50EB /* config.js */; };
+		AAEFC65F300E382000FC50EB /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC657300E382000FC50EB /* README.md */; };
+		AAEFC660300E382000FC50EB /* icons in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC658300E382000FC50EB /* icons */; };
+		AAEFC661300E382000FC50EB /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC659300E382000FC50EB /* manifest.json */; };
+		AAEFC662300E382000FC50EB /* lib in Resources */ = {isa = PBXBuildFile; fileRef = AAEFC65A300E382000FC50EB /* lib */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AAEFC643300E382000FC50EB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AAEFC61E300E381F00FC50EB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AAEFC640300E382000FC50EB;
+			remoteInfo = "X Verim Extension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AAEFC64E300E382000FC50EB /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AAEFC642300E382000FC50EB /* X Verim Extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		AAEFC626300E381F00FC50EB /* X Verim.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "X Verim.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAEFC629300E381F00FC50EB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		AAEFC62D300E381F00FC50EB /* Base */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = Base; path = Base.lproj/Main.html; sourceTree = "<group>"; };
+		AAEFC62F300E381F00FC50EB /* Icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Icon.png; sourceTree = "<group>"; };
+		AAEFC631300E381F00FC50EB /* Style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
+		AAEFC633300E381F00FC50EB /* Script.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Script.js; sourceTree = "<group>"; };
+		AAEFC635300E381F00FC50EB /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		AAEFC638300E381F00FC50EB /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		AAEFC63A300E382000FC50EB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AAEFC63C300E382000FC50EB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AAEFC641300E382000FC50EB /* X Verim Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "X Verim Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAEFC646300E382000FC50EB /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		AAEFC648300E382000FC50EB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AAEFC653300E382000FC50EB /* popup */ = {isa = PBXFileReference; lastKnownFileType = folder; name = popup; path = "../../../x-verim/popup"; sourceTree = "<group>"; };
+		AAEFC654300E382000FC50EB /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = "../../../x-verim/background.js"; sourceTree = "<group>"; };
+		AAEFC655300E382000FC50EB /* content */ = {isa = PBXFileReference; lastKnownFileType = folder; name = content; path = "../../../x-verim/content"; sourceTree = "<group>"; };
+		AAEFC656300E382000FC50EB /* config.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = config.js; path = "../../../x-verim/config.js"; sourceTree = "<group>"; };
+		AAEFC657300E382000FC50EB /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = README.md; path = "../../../x-verim/README.md"; sourceTree = "<group>"; };
+		AAEFC658300E382000FC50EB /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; name = icons; path = "../../../x-verim/icons"; sourceTree = "<group>"; };
+		AAEFC659300E382000FC50EB /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = "../../../x-verim/manifest.json"; sourceTree = "<group>"; };
+		AAEFC65A300E382000FC50EB /* lib */ = {isa = PBXFileReference; lastKnownFileType = folder; name = lib; path = "../../../x-verim/lib"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AAEFC623300E381F00FC50EB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAEFC63E300E382000FC50EB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AAEFC61D300E381F00FC50EB = {
+			isa = PBXGroup;
+			children = (
+				AAEFC628300E381F00FC50EB /* X Verim */,
+				AAEFC645300E382000FC50EB /* X Verim Extension */,
+				AAEFC627300E381F00FC50EB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AAEFC627300E381F00FC50EB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AAEFC626300E381F00FC50EB /* X Verim.app */,
+				AAEFC641300E382000FC50EB /* X Verim Extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AAEFC628300E381F00FC50EB /* X Verim */ = {
+			isa = PBXGroup;
+			children = (
+				AAEFC629300E381F00FC50EB /* AppDelegate.swift */,
+				AAEFC635300E381F00FC50EB /* ViewController.swift */,
+				AAEFC637300E381F00FC50EB /* Main.storyboard */,
+				AAEFC63A300E382000FC50EB /* Assets.xcassets */,
+				AAEFC63C300E382000FC50EB /* Info.plist */,
+				AAEFC62B300E381F00FC50EB /* Resources */,
+			);
+			path = "X Verim";
+			sourceTree = "<group>";
+		};
+		AAEFC62B300E381F00FC50EB /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AAEFC62C300E381F00FC50EB /* Main.html */,
+				AAEFC62F300E381F00FC50EB /* Icon.png */,
+				AAEFC631300E381F00FC50EB /* Style.css */,
+				AAEFC633300E381F00FC50EB /* Script.js */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		AAEFC645300E382000FC50EB /* X Verim Extension */ = {
+			isa = PBXGroup;
+			children = (
+				AAEFC652300E382000FC50EB /* Resources */,
+				AAEFC646300E382000FC50EB /* SafariWebExtensionHandler.swift */,
+				AAEFC648300E382000FC50EB /* Info.plist */,
+			);
+			path = "X Verim Extension";
+			sourceTree = "<group>";
+		};
+		AAEFC652300E382000FC50EB /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AAEFC653300E382000FC50EB /* popup */,
+				AAEFC654300E382000FC50EB /* background.js */,
+				AAEFC655300E382000FC50EB /* content */,
+				AAEFC656300E382000FC50EB /* config.js */,
+				AAEFC657300E382000FC50EB /* README.md */,
+				AAEFC658300E382000FC50EB /* icons */,
+				AAEFC659300E382000FC50EB /* manifest.json */,
+				AAEFC65A300E382000FC50EB /* lib */,
+			);
+			name = Resources;
+			path = "X Verim Extension";
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AAEFC625300E381F00FC50EB /* X Verim */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAEFC64F300E382000FC50EB /* Build configuration list for PBXNativeTarget "X Verim" */;
+			buildPhases = (
+				AAEFC622300E381F00FC50EB /* Sources */,
+				AAEFC623300E381F00FC50EB /* Frameworks */,
+				AAEFC624300E381F00FC50EB /* Resources */,
+				AAEFC64E300E382000FC50EB /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AAEFC644300E382000FC50EB /* PBXTargetDependency */,
+			);
+			name = "X Verim";
+			packageProductDependencies = (
+			);
+			productName = "X Verim";
+			productReference = AAEFC626300E381F00FC50EB /* X Verim.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AAEFC640300E382000FC50EB /* X Verim Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAEFC64B300E382000FC50EB /* Build configuration list for PBXNativeTarget "X Verim Extension" */;
+			buildPhases = (
+				AAEFC63D300E382000FC50EB /* Sources */,
+				AAEFC63E300E382000FC50EB /* Frameworks */,
+				AAEFC63F300E382000FC50EB /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "X Verim Extension";
+			packageProductDependencies = (
+			);
+			productName = "X Verim Extension";
+			productReference = AAEFC641300E382000FC50EB /* X Verim Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AAEFC61E300E381F00FC50EB /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					AAEFC625300E381F00FC50EB = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					AAEFC640300E382000FC50EB = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = AAEFC621300E381F00FC50EB /* Build configuration list for PBXProject "X Verim" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AAEFC61D300E381F00FC50EB;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = AAEFC627300E381F00FC50EB /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AAEFC625300E381F00FC50EB /* X Verim */,
+				AAEFC640300E382000FC50EB /* X Verim Extension */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AAEFC624300E381F00FC50EB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAEFC630300E381F00FC50EB /* Icon.png in Resources */,
+				AAEFC639300E381F00FC50EB /* Main.storyboard in Resources */,
+				AAEFC634300E381F00FC50EB /* Script.js in Resources */,
+				AAEFC62E300E381F00FC50EB /* Main.html in Resources */,
+				AAEFC63B300E382000FC50EB /* Assets.xcassets in Resources */,
+				AAEFC632300E381F00FC50EB /* Style.css in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAEFC63F300E382000FC50EB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAEFC65D300E382000FC50EB /* content in Resources */,
+				AAEFC661300E382000FC50EB /* manifest.json in Resources */,
+				AAEFC662300E382000FC50EB /* lib in Resources */,
+				AAEFC65C300E382000FC50EB /* background.js in Resources */,
+				AAEFC65F300E382000FC50EB /* README.md in Resources */,
+				AAEFC660300E382000FC50EB /* icons in Resources */,
+				AAEFC65E300E382000FC50EB /* config.js in Resources */,
+				AAEFC65B300E382000FC50EB /* popup in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AAEFC622300E381F00FC50EB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAEFC636300E381F00FC50EB /* ViewController.swift in Sources */,
+				AAEFC62A300E381F00FC50EB /* AppDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAEFC63D300E382000FC50EB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAEFC647300E382000FC50EB /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AAEFC644300E382000FC50EB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AAEFC640300E382000FC50EB /* X Verim Extension */;
+			targetProxy = AAEFC643300E382000FC50EB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		AAEFC62C300E381F00FC50EB /* Main.html */ = {
+			isa = PBXVariantGroup;
+			children = (
+				AAEFC62D300E381F00FC50EB /* Base */,
+			);
+			name = Main.html;
+			sourceTree = "<group>";
+		};
+		AAEFC637300E381F00FC50EB /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				AAEFC638300E381F00FC50EB /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		AAEFC649300E382000FC50EB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AAEFC64A300E382000FC50EB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		AAEFC64C300E382000FC50EB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "X Verim Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "X Verim Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fatihdisci.xverim.Extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AAEFC64D300E382000FC50EB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "X Verim Extension/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "X Verim Extension";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.14;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fatihdisci.xverim.Extension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AAEFC650300E382000FC50EB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "X Verim/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "X Verim";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fatihdisci.xverim;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AAEFC651300E382000FC50EB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "X Verim/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "X Verim";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"-framework",
+					SafariServices,
+					"-framework",
+					WebKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fatihdisci.xverim;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AAEFC621300E381F00FC50EB /* Build configuration list for PBXProject "X Verim" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAEFC649300E382000FC50EB /* Debug */,
+				AAEFC64A300E382000FC50EB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAEFC64B300E382000FC50EB /* Build configuration list for PBXNativeTarget "X Verim Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAEFC64C300E382000FC50EB /* Debug */,
+				AAEFC64D300E382000FC50EB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAEFC64F300E382000FC50EB /* Build configuration list for PBXNativeTarget "X Verim" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAEFC650300E382000FC50EB /* Debug */,
+				AAEFC651300E382000FC50EB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AAEFC61E300E381F00FC50EB /* Project object */;
+}

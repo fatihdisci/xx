@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "X Verim",
+  "version": "0.1.0",
+  "description": "Personal accelerator for X — keyboard shortcuts, niche filter, AI assist. No unattended automation.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://api.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["config.js", "background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*"],
+      "js": [
+        "config.js",
+        "lib/x-dom.js",
+        "content/content.js"
+      ],
+      "css": [
+        "content/content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "X Verim",
+    "default_icon": {
+      "16": "icons/16.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  }
+}

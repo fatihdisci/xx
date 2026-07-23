@@ -1,0 +1,249 @@
+/* X Verim — content-script styles. Dark theme, native-looking. */
+
+.xverim-focused {
+  outline: 3px solid #1d9bf0 !important;
+  outline-offset: -3px;
+  border-radius: 12px;
+  background-color: rgba(29, 155, 240, 0.07) !important;
+  transition: outline-color 150ms ease, background-color 150ms ease;
+}
+
+/* ---------- Focus badge ---------- */
+/* Floating (not injected into X's own DOM) so it can never overlap or
+   intercept clicks on real timeline controls. */
+.xverim-focus-badge {
+  position: fixed;
+  background: #1d9bf0;
+  color: #fff;
+  font: 700 10px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 2147483646;
+}
+
+.xverim-dim {
+  opacity: 0.35 !important;
+  pointer-events: none;
+}
+
+.xverim-hide {
+  display: none !important;
+}
+
+.xverim-highlight {
+  position: relative;
+}
+.xverim-highlight::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #1d9bf0;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* ---------- Floating panel ---------- */
+.xverim-panel {
+  position: fixed;
+  width: 320px;
+  max-height: 80vh;
+  overflow: auto;
+  background: #16181c;
+  color: #e7e9ea;
+  border: 1px solid #2f3336;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  z-index: 2147483646;
+  display: none;
+  scrollbar-width: thin;
+  scrollbar-color: #2f3336 transparent;
+}
+.xverim-panel::-webkit-scrollbar { width: 6px; }
+.xverim-panel::-webkit-scrollbar-thumb { background: #2f3336; border-radius: 3px; }
+.xverim-panel.xverim-open { display: block; }
+
+.xverim-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  cursor: move;
+  user-select: none;
+}
+.xverim-panel-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #e7e9ea;
+}
+.xverim-icon-btn {
+  background: transparent;
+  border: 0;
+  color: #71767b;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.xverim-icon-btn:hover { background: rgba(255, 255, 255, 0.06); color: #e7e9ea; }
+
+.xverim-panel-section { margin-bottom: 10px; }
+.xverim-panel-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #71767b;
+  margin-bottom: 4px;
+}
+.xverim-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #e7e9ea;
+}
+.xverim-toggle input { cursor: pointer; }
+
+.xverim-counters { display: flex; gap: 8px; flex-wrap: wrap; }
+.xverim-counter {
+  background: #202327;
+  border: 1px solid #2f3336;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #e7e9ea;
+  cursor: default;
+}
+.xverim-counter b {
+  color: #1d9bf0;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+/* ---------- Analyze popover ---------- */
+.xverim-popover {
+  position: absolute;
+  background: #16181c;
+  color: #e7e9ea;
+  border: 1px solid #2f3336;
+  border-radius: 10px;
+  padding: 12px 12px 12px 12px;
+  max-width: 320px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  z-index: 2147483647;
+}
+.xverim-popover-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: transparent;
+  border: 0;
+  color: #71767b;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.xverim-popover-close:hover { background: rgba(255, 255, 255, 0.06); color: #e7e9ea; }
+.xverim-popover-section { margin-bottom: 8px; }
+.xverim-popover-section:last-child { margin-bottom: 0; }
+.xverim-popover-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #71767b;
+  margin-bottom: 3px;
+}
+.xverim-popover-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.xverim-popover-label-row .xverim-popover-label { margin-bottom: 0; }
+.xverim-popover-body { color: #e7e9ea; font-size: 13px; word-break: break-word; }
+.xverim-popover-list { margin: 0; padding-left: 0; list-style: none; color: #e7e9ea; }
+.xverim-popover-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.xverim-popover-list li:last-child { margin-bottom: 0; }
+.xverim-popover-angle-text { flex: 1; padding-left: 14px; position: relative; }
+.xverim-popover-angle-text::before {
+  /* CSS escape, not a literal bullet — keeps the glyph correct no matter how
+     the browser decides to decode this file. */
+  content: "\2022";
+  position: absolute;
+  left: 2px;
+  color: #71767b;
+}
+
+.xverim-copy-btn {
+  background: transparent;
+  border: 0;
+  color: #71767b;
+  padding: 3px 5px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.xverim-copy-btn:hover { background: rgba(255, 255, 255, 0.06); color: #e7e9ea; }
+.xverim-copy-btn.xverim-copy-ok { color: #00ba7c; }
+
+/* ---------- Guardrail banner ---------- */
+.xverim-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #1d9bf0;
+  color: #fff;
+  padding: 8px 12px;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 2147483647;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.xverim-banner-text { flex: 1; display: inline-flex; align-items: center; gap: 6px; }
+.xverim-banner-icon { display: inline-block; vertical-align: middle; }
+.xverim-icon-btn svg,
+.xverim-popover-close svg,
+.xverim-banner-close svg,
+.xverim-copy-btn svg { display: block; }
+.xverim-banner-close {
+  background: transparent;
+  border: 0;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px;
+  border-radius: 4px;
+}
+.xverim-banner-close:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
