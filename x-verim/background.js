@@ -1,4 +1,4 @@
-﻿// Background — only place that talks to api.openai.com.
+﻿// Background — only place that talks to api.deepseek.com.
 // Routes AI_* / GET_FILTER / GET_COUNTS / GUARDRAIL_LOG messages from content
 // scripts and the popup, and pushes GUARDRAIL_WARN to x.com tabs. The persona
 // never leaves this file — it only feeds the system prompt.
@@ -42,8 +42,11 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
       }
     }
     if (!persona.language || persona.language === "auto") {
-      lines.push("Language: mirror the language of the source tweet or topic"
-        + (respond ? ", in every field you return — the analysis fields too, not just the replies." : "."));
+      if (respond) {
+        lines.push("CRITICAL LANGUAGE RULE: detect the language the source tweet quoted in the user message is written in, and write your reply text in that exact language — not the language of these instructions. If the tweet mixes languages, mirror that mix. Exception: if a field's own instruction explicitly asks for a specific language (e.g. a translation into another language), that field follows its own instruction.");
+      } else {
+        lines.push("Language: write in the language of the requested topic; if that is unclear, default to the language the request itself is written in.");
+      }
     } else {
       lines.push("Language: write in " + persona.language + ".");
     }
@@ -62,20 +65,19 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     return lines.join("\n");
   }
 
-  // -------- OpenAI API call --------
-  // Note: gpt-5-nano (like other gpt-5-series models) only supports the
-  // default temperature via /chat/completions, so it is not sent here.
-  async function openai(messages, opts) {
+  // -------- DeepSeek API call --------
+  async function deepseek(messages, opts) {
     var o = opts || {};
-    var key = C.OPENAI_API_KEY;
+    var key = C.DEEPSEEK_API_KEY;
     if (!key || key === "PASTE_YOUR_KEY_HERE") {
-      throw new Error("OPENAI_API_KEY not set in config.js");
+      throw new Error("DEEPSEEK_API_KEY not set in config.js");
     }
-    var base = (C.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
+    var base = (C.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1").replace(/\/+$/, "");
     var url = base + "/chat/completions";
     var body = {
-      model: C.OPENAI_MODEL || "gpt-5-nano",
-      messages: messages
+      model: C.DEEPSEEK_MODEL || "deepseek-v4-flash",
+      messages: messages,
+      temperature: typeof o.temperature === "number" ? o.temperature : (C.AI_TEMPERATURE != null ? C.AI_TEMPERATURE : 0.8)
     };
     if (o.json) body.response_format = { type: "json_object" };
     var res = await fetch(url, {
@@ -89,7 +91,7 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     if (!res.ok) {
       var txt = "";
       try { txt = await res.text(); } catch (_) {}
-      throw new Error("OpenAI " + res.status + ": " + (txt || res.statusText || "request failed"));
+      throw new Error("DeepSeek " + res.status + ": " + (txt || res.statusText || "request failed"));
     }
     var data = await res.json();
     var content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
@@ -143,9 +145,9 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
              + "Each under 240 chars and postable as-is — a finished tweet, not a description of one.\n"
              + "Do not number them and do not add hashtags unless one genuinely belongs.\n"
              + 'Return JSON: {"items": ["tweet1", "tweet2", ...]}.';
-    var out = await openai(
+    var out = await deepseek(
       [{ role: "system", content: sys }, { role: "user", content: user }],
-      { json: true }
+      { json: true, temperature: C.AI_TEMPERATURE != null ? C.AI_TEMPERATURE : 0.9 }
     );
     var parsed = safeJsonParse(out);
     var items = [];
@@ -164,33 +166,40 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
       .filter(Boolean);
   }
 
+  // The "a" shortcut. Returns ready-to-post reply drafts in the tweet's own
+  // language, each paired with a translation into the user's language so a
+  // foreign-language draft can be understood before posting. The source tweet
+  // itself is NOT translated.
   async function analyzeTweet(payload) {
     var p = payload || {};
-    var counts = p.counts || {};
+    var analyzeCfg = C.ANALYZE || {};
+    var translateTo = (analyzeCfg.translateTo || "Türkçe").trim() || "Türkçe";
+    var replyCount = Math.max(1, Math.min(5, analyzeCfg.replyCount || 3));
     var sys = buildSystemPrompt("respond",
-      'Return ONLY valid JSON with shape {"take": string, "whyPerforming": string, "replyAngles": string[3]}.');
-    var user = "Tweet by @" + (p.authorHandle || "unknown") + ": \"" + (p.text || "") + "\"\n"
-             + "Engagement: " + JSON.stringify(counts) + "\n\n"
-             + "take: one plain sentence on what this tweet is really saying.\n"
-             + "whyPerforming: one plain sentence on why it is or isn't getting engagement.\n"
-             + "replyAngles: 3 reply drafts, ready to post as-is — not descriptions of an approach. "
-             + "Each under 240 chars, each a genuinely different response, all strictly about this tweet's own subject.\n\n"
-             + 'Return JSON: {"take": string, "whyPerforming": string, "replyAngles": [string, string, string]}.';
-    var out = await openai(
+      'Return ONLY valid JSON with shape {"replies": [{"text": string, "translation": string}, ...]}.');
+    var user = "Tweet by @" + (p.authorHandle || "unknown") + ": \"" + (p.text || "") + "\"\n\n"
+             + "Write " + replyCount + " reply drafts to this tweet, ready to post as-is — finished tweets, not descriptions of an approach. "
+             + "text: the reply itself, in the SAME language as the tweet. Each under 240 chars, each a genuinely different angle, "
+             + "all strictly about this tweet's own subject. Sound like a real person firing off a quick reply — "
+             + "casual, specific, no brand voice, no 'Great point', no opening with 'I '.\n"
+             + "translation: a natural " + translateTo + " translation of that reply, so it can be understood before posting. "
+             + "If the reply is ALREADY written in " + translateTo + ", set translation to an empty string \"\".\n\n"
+             + 'Return JSON: {"replies": [{"text": "...", "translation": "..."}, ...]} with ' + replyCount + ' items.';
+    var out = await deepseek(
       [{ role: "system", content: sys }, { role: "user", content: user }],
       { json: true }
     );
     var parsed = safeJsonParse(out);
-    if (parsed && typeof parsed === "object") {
-      return {
-        take: String(parsed.take || "").trim(),
-        whyPerforming: String(parsed.whyPerforming || "").trim(),
-        replyAngles: Array.isArray(parsed.replyAngles)
-          ? parsed.replyAngles.map(function (x) { return String(x).trim(); }).filter(Boolean)
-          : []
-      };
+    var replies = [];
+    if (parsed && Array.isArray(parsed.replies)) {
+      replies = parsed.replies.map(function (r) {
+        if (r && typeof r === "object") {
+          return { text: String(r.text || "").trim(), translation: String(r.translation || "").trim() };
+        }
+        return { text: String(r || "").trim(), translation: "" };
+      }).filter(function (r) { return r.text; });
     }
-    return { take: stripCodeFence(out), whyPerforming: "", replyAngles: [] };
+    return { replies: replies };
   }
 
   async function draftReply(payload) {
@@ -199,8 +208,9 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     var user = "Original by @" + (p.authorHandle || "unknown") + ": \"" + (p.originalTweet || "") + "\"\n"
              + "Write one reply draft, ready to post as-is. ≤ 240 chars. Do not start with 'I '. "
              + "Reply to what this tweet is actually about — nothing else.";
-    var out = await openai(
-      [{ role: "system", content: sys }, { role: "user", content: user }]
+    var out = await deepseek(
+      [{ role: "system", content: sys }, { role: "user", content: user }],
+      { temperature: C.AI_TEMPERATURE != null ? C.AI_TEMPERATURE : 0.8 }
     );
     return stripCodeFence(out).trim();
   }

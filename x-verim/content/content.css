@@ -19,7 +19,7 @@
   letter-spacing: 0.02em;
   padding: 3px 9px;
   border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 0 3px rgba(29, 155, 240, 0.18);
   pointer-events: none;
   white-space: nowrap;
   z-index: 2147483646;
@@ -131,80 +131,226 @@
 }
 
 /* ---------- Analyze popover ---------- */
+@keyframes xverim-pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes xverim-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes xverim-card-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes xverim-shimmer {
+  from { background-position: -340px 0; }
+  to   { background-position: 340px 0; }
+}
+
 .xverim-popover {
   position: absolute;
-  background: #16181c;
   color: #e7e9ea;
-  border: 1px solid #2f3336;
-  border-radius: 10px;
-  padding: 12px 12px 12px 12px;
-  max-width: 320px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  /* Layered surface + hairline highlight = depth without a heavy border. */
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(29, 155, 240, 0.10), transparent 60%),
+    linear-gradient(180deg, #1a1d21 0%, #15171b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 12px;
+  width: 344px;
+  max-width: 344px;
+  max-height: 74vh;
+  overflow-y: auto;
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   z-index: 2147483647;
+  transform-origin: top left;
+  animation: xverim-pop-in 170ms cubic-bezier(0.22, 1, 0.36, 1);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
 }
-.xverim-popover-close {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  background: transparent;
-  border: 0;
-  color: #71767b;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
+.xverim-popover::-webkit-scrollbar { width: 6px; }
+.xverim-popover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }
+
+.xverim-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
 }
-.xverim-popover-close:hover { background: rgba(255, 255, 255, 0.06); color: #e7e9ea; }
-.xverim-popover-section { margin-bottom: 8px; }
+.xverim-popover-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  font-size: 13.5px;
+  letter-spacing: 0.01em;
+  color: #f7f9f9;
+}
+.xverim-popover-title svg { color: #1d9bf0; }
+.xverim-popover-header-actions { display: inline-flex; gap: 2px; }
+/* Scoped so the shared .xverim-icon-btn in the panel keeps its own look. */
+.xverim-popover-header-actions .xverim-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 999px;
+  color: #8b98a5;
+  transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+.xverim-popover-header-actions .xverim-icon-btn:hover {
+  background: rgba(29, 155, 240, 0.14);
+  color: #1d9bf0;
+}
+.xverim-popover-header-actions [data-act="regen"]:active svg { transform: rotate(-90deg); transition: transform 200ms ease; }
+
+.xverim-popover-content { animation: xverim-fade-in 150ms ease; }
+
+.xverim-popover-status { color: #8b98a5; font-size: 13px; padding: 2px 0; }
+.xverim-popover-error { color: #f4212e; word-break: break-word; }
+.xverim-popover-empty {
+  color: #8b98a5;
+  font-size: 12.5px;
+  padding: 10px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.10);
+  border-radius: 10px;
+}
+
+.xverim-popover-section { margin-bottom: 14px; }
 .xverim-popover-section:last-child { margin-bottom: 0; }
 .xverim-popover-label {
-  font-size: 11px;
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #71767b;
-  margin-bottom: 3px;
+  letter-spacing: 0.07em;
+  color: #6e7b88;
+  margin-bottom: 7px;
 }
-.xverim-popover-label-row {
+.xverim-popover-translation {
+  color: #d7dbdf;
+  font-size: 13.5px;
+  line-height: 1.5;
+  word-break: break-word;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: 3px solid #1d9bf0;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.xverim-popover-list { margin: 0; padding-left: 0; list-style: none; color: #e7e9ea; }
+.xverim-popover-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 11px 12px;
+  margin-bottom: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+  animation: xverim-card-in 240ms ease backwards;
+}
+.xverim-popover-list li:hover {
+  background: rgba(29, 155, 240, 0.06);
+  border-color: rgba(29, 155, 240, 0.45);
+}
+.xverim-popover-list li:last-child { margin-bottom: 0; }
+.xverim-popover-list li:nth-child(1) { animation-delay: 30ms; }
+.xverim-popover-list li:nth-child(2) { animation-delay: 85ms; }
+.xverim-popover-list li:nth-child(3) { animation-delay: 140ms; }
+.xverim-popover-list li:nth-child(4) { animation-delay: 195ms; }
+.xverim-popover-list li:nth-child(5) { animation-delay: 250ms; }
+
+.xverim-popover-angle-text {
+  color: #eef0f1;
+  font-size: 13.5px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+/* Translation of the draft above, dimmer and set off by a left rule. */
+.xverim-popover-angle-tr {
+  color: #8b98a5;
+  font-size: 12.5px;
+  line-height: 1.45;
+  word-break: break-word;
+  padding-left: 9px;
+  border-left: 2px solid rgba(29, 155, 240, 0.55);
+}
+.xverim-popover-angle-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
-.xverim-popover-label-row .xverim-popover-label { margin-bottom: 0; }
-.xverim-popover-body { color: #e7e9ea; font-size: 13px; word-break: break-word; }
-.xverim-popover-list { margin: 0; padding-left: 0; list-style: none; color: #e7e9ea; }
-.xverim-popover-list li {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
+.xverim-char-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #5c6773;
+  padding-left: 2px;
 }
-.xverim-popover-list li:last-child { margin-bottom: 0; }
-.xverim-popover-angle-text { flex: 1; padding-left: 14px; position: relative; }
-.xverim-popover-angle-text::before {
-  /* CSS escape, not a literal bullet — keeps the glyph correct no matter how
-     the browser decides to decode this file. */
-  content: "\2022";
-  position: absolute;
-  left: 2px;
-  color: #71767b;
+.xverim-char-count.xverim-char-warn { color: #ffd400; }
+.xverim-char-count.xverim-char-over { color: #f4212e; }
+.xverim-popover-btn-group { display: inline-flex; align-items: center; gap: 6px; }
+
+.xverim-reply-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(180deg, #1d9bf0 0%, #1a8cd8 100%);
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  font: 700 12.5px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  padding: 7px 15px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transition: filter 140ms ease, transform 120ms ease, box-shadow 140ms ease;
 }
+.xverim-reply-btn:hover { filter: brightness(1.08); box-shadow: 0 3px 12px rgba(29, 155, 240, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
+.xverim-reply-btn:active { transform: scale(0.96); }
 
 .xverim-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   background: transparent;
   border: 0;
-  color: #71767b;
-  padding: 3px 5px;
+  color: #8b98a5;
+  padding: 0;
   line-height: 1;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 999px;
   flex-shrink: 0;
+  transition: background 140ms ease, color 140ms ease;
 }
-.xverim-copy-btn:hover { background: rgba(255, 255, 255, 0.06); color: #e7e9ea; }
-.xverim-copy-btn.xverim-copy-ok { color: #00ba7c; }
+.xverim-copy-btn:hover { background: rgba(255, 255, 255, 0.08); color: #e7e9ea; }
+.xverim-copy-btn.xverim-copy-ok { color: #00ba7c; background: rgba(0, 186, 124, 0.14); }
+
+/* Loading skeleton */
+.xverim-skeleton { padding: 2px 0; }
+.xverim-sk-line, .xverim-sk-block, .xverim-sk-card {
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 680px 100%;
+  animation: xverim-shimmer 1.25s ease-in-out infinite;
+}
+.xverim-sk-line { height: 10px; margin-bottom: 9px; }
+.xverim-sk-block { height: 44px; margin-bottom: 10px; }
+.xverim-sk-card { height: 74px; margin-bottom: 9px; border-radius: 12px; }
+.xverim-sk-card:last-child { margin-bottom: 0; }
 
 /* ---------- Guardrail banner ---------- */
 .xverim-banner {
@@ -225,8 +371,8 @@
 .xverim-banner-text { flex: 1; display: inline-flex; align-items: center; gap: 6px; }
 .xverim-banner-icon { display: inline-block; vertical-align: middle; }
 .xverim-icon-btn svg,
-.xverim-popover-close svg,
 .xverim-banner-close svg,
+.xverim-reply-btn svg,
 .xverim-copy-btn svg { display: block; }
 .xverim-banner-close {
   background: transparent;

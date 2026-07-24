@@ -6,7 +6,7 @@
   "permissions": ["storage"],
   "host_permissions": [
     "https://x.com/*",
-    "https://api.openai.com/*"
+    "https://api.deepseek.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -24,6 +24,12 @@
         "content/content.css"
       ],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/x-dom.js", "content/draft-bridge.js"],
+      "matches": ["https://x.com/*"]
     }
   ],
   "action": {

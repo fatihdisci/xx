@@ -2,10 +2,10 @@
 // Modules (in order):
 //   1. Focus model         — pick the timeline article closest to viewport center
 //   2. Keyboard shortcuts  — j/k/l/f/s/a/r/v, read from config.SHORTCUTS
-//   3. Insert draft        — execCommand + InputEvent fallback into the composer
+//   3. Insert draft        — page-world Draft.js paste bridge (no native DOM writes)
 //   4. Niche filter        — MutationObserver + rAF sweep, dim/hide/highlight
 //   5. Floating panel      — filter toggle + counters, draggable
-//   6. Analyze popover     — small dark card with take / why / reply angles
+//   6. Analyze popover     — small dark card: translation + reply drafts (a)
 //   7. Guardrail banner    — non-blocking warning when pace exceeds the limit
 //
 // HARD RULE: never auto-click submit (tweetButton / tweetButtonInline).
@@ -30,7 +30,12 @@
     panelEl: null,
     panelPos: null,
     popoverEl: null,
-    focusBadgeEl: null
+    popoverArticle: null,
+    focusBadgeEl: null,
+    // After j/k jumps we lock the auto-pick briefly so the highlight lands on
+    // the chosen tweet instead of flickering to whatever the smooth-scroll
+    // passes over on the way there.
+    focusLockUntil: 0
   };
 
   // ============== Focus model ==============
@@ -38,25 +43,45 @@
     return Array.prototype.slice.call(document.querySelectorAll(D.SELECTORS.tweet));
   }
 
-  function pickFocused(articles) {
+  // The active tweet is the one crossing a "reading line" a little above the
+  // viewport's middle — that reads as the tweet you're actually looking at,
+  // and it stays right even for a tweet taller than the viewport (whose real
+  // midpoint would be off-screen). `current` adds hysteresis: while the tweet
+  // that's already active still crosses the line, we keep it, so small scrolls
+  // don't make the highlight jitter between neighbours.
+  function focusLineDist(a, vh, line) {
+    var r = a.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > vh) return Infinity;        // off-screen
+    if (r.top <= line && r.bottom >= line) return 0;        // crosses the line
+    return r.top > line ? r.top - line : line - r.bottom;   // nearest edge
+  }
+  function pickFocused(articles, current) {
     if (!articles || !articles.length) return null;
     var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-    var cy = window.scrollY + vh / 2;
+    var line = vh * 0.38;
+    // Keep the active tweet while it still crosses the line, or stays within a
+    // small band around it. That kills the flip-flop when two neighbours sit on
+    // the boundary, and keeps j/k's pick even when a short tweet centred by the
+    // jump doesn't quite reach the line.
+    if (current && current.isConnected && focusLineDist(current, vh, line) <= vh * 0.12) {
+      return current;
+    }
     var best = null, bestDist = Infinity;
     for (var i = 0; i < articles.length; i++) {
-      var a = articles[i];
-      var r = a.getBoundingClientRect();
-      if (r.bottom < 0 || r.top > vh) continue;  // off-screen
-      var absTop = window.scrollY + r.top;
-      var absMid = absTop + r.height / 2;
-      var dist = Math.abs(absMid - cy);
-      if (dist < bestDist) { bestDist = dist; best = a; }
+      var dist = focusLineDist(articles[i], vh, line);
+      if (dist < bestDist) { bestDist = dist; best = articles[i]; }
     }
-    return best;
+    return bestDist === Infinity ? null : best;
   }
 
   function applyFocus() {
-    var next = pickFocused(state.articles);
+    // During a post-j/k lock, keep the chosen tweet; just keep the badge glued
+    // to it as the smooth scroll settles.
+    if (state.focusLockUntil && Date.now() < state.focusLockUntil) {
+      updateFocusBadge();
+      return;
+    }
+    var next = pickFocused(state.articles, state.focusedTweet);
     if (next !== state.focusedTweet) {
       if (state.focusedTweet) state.focusedTweet.classList.remove("xverim-focused");
       state.focusedTweet = next;
@@ -73,28 +98,47 @@
     if (state.focusBadgeEl) return state.focusBadgeEl;
     var el = document.createElement("div");
     el.className = "xverim-focus-badge";
-    el.textContent = "● Active — shortcuts apply here";
+    el.textContent = "● Aktif tweet";
     el.setAttribute("aria-hidden", "true");
     (document.body || document.documentElement).appendChild(el);
     state.focusBadgeEl = el;
     return el;
   }
+  // A *visible* X dialog (reply / compose / media viewer) — deliberately not
+  // our own panel/popover, which also carry role="dialog" and would otherwise
+  // keep the badge hidden for good once opened.
+  function xDialogOpen() {
+    var dialogs = document.querySelectorAll('[role="dialog"]');
+    for (var i = 0; i < dialogs.length; i++) {
+      var d = dialogs[i];
+      if (d.classList.contains("xverim-panel") || d.classList.contains("xverim-popover")) continue;
+      if (d.getClientRects && d.getClientRects().length) return true;  // rendered
+    }
+    return false;
+  }
+  // Roughly clears X's sticky top bar so the badge is never hidden behind it.
+  var HEADER_SAFE = 56;
   function updateFocusBadge() {
     var article = state.focusedTweet;
-    if (!article || !article.isConnected) {
+    // Hide it entirely while a modal is open (reply / compose): the timeline is
+    // behind the overlay, and a floating badge over the dialog just looks broken.
+    if (xDialogOpen() || !article || !article.isConnected) {
       if (state.focusBadgeEl) state.focusBadgeEl.style.display = "none";
       return;
     }
     var vh = window.innerHeight || document.documentElement.clientHeight || 0;
     var vw = window.innerWidth || document.documentElement.clientWidth || 0;
     var r = article.getBoundingClientRect();
-    if (r.bottom <= 0 || r.top >= vh) {
+    if (r.bottom <= HEADER_SAFE || r.top >= vh) {
       if (state.focusBadgeEl) state.focusBadgeEl.style.display = "none";
       return;
     }
     var el = ensureFocusBadge();
     el.style.display = "block";
-    var top = Math.max(4, r.top - 20);
+    // Sit just above the tweet, but drop just inside it (and below the header)
+    // when the top edge is scrolled off — so it stays pinned to the active card.
+    var top = r.top - 22;
+    if (top < HEADER_SAFE) top = Math.min(r.bottom - 24, Math.max(HEADER_SAFE, r.top + 6));
     var maxLeft = Math.max(4, vw - el.offsetWidth - 8);
     var left = Math.min(Math.max(4, r.left + 12), maxLeft);
     el.style.top = top + "px";
@@ -123,42 +167,109 @@
   }
 
   // ============== Insert draft ==============
-  // execCommand("insertText") is deprecated but still works on contenteditable
-  // in Chrome; the InputEvent fallback covers cases where it returns false.
-  function insertDraft(text) {
-    var el = D.getComposer ? D.getComposer() : document.querySelector(D.SELECTORS.composer);
-    if (!el) return false;
+  // Put text into X's draft.js composer WITHOUT leaving a "phantom" copy.
+  //
+  // draft.js renders the editor from an internal model into React-managed
+  // <span data-text="true"> nodes. The old path — execCommand("insertText") —
+  // makes the *browser* mutate the DOM natively; draft.js then also writes the
+  // same text into its model and re-renders its own span. React can't reclaim
+  // the stray native node it never created, so the text shows up twice (one
+  // dead, one live) and every later keystroke corrupts the now-desynced model.
+  //
+  // Safari/WebKit does not reliably deliver synthetic clipboard/input events
+  // from an isolated extension world to X's React tree. The web-accessible
+  // draft-bridge.js runs in the page world and calls DraftEditor.onPaste with a
+  // clipboard-shaped event. Draft.js then updates EditorState itself; WebKit
+  // never receives an instruction to insert a native text node.
+  var DRAFT_BRIDGE_REQUEST = "xverim:draft-insert-request";
+  var DRAFT_BRIDGE_RESPONSE = "xverim:draft-insert-response";
+  var DRAFT_BRIDGE_READY = "xverim:draft-bridge-ready";
+  var draftBridgeState = { loading: false, ready: false, callbacks: [], nextId: 1, pending: {} };
+  function composerText(el) {
+    return (el && el.textContent ? el.textContent : "").replace(/\u00A0/g, " ");
+  }
+  function composerHasText(el, text) {
+    return composerText(el).trim() === String(text).trim();
+  }
+  function composerIndex(el) {
+    var all;
+    try { all = Array.prototype.slice.call(document.querySelectorAll(D.SELECTORS.composer)); } catch (_) { all = []; }
+    return all.indexOf(el);
+  }
+  function injectPageScript(path, done) {
+    var script = document.createElement("script");
+    script.src = chrome.runtime.getURL(path);
+    script.async = false;
+    script.onload = function () { script.remove(); done(true); };
+    script.onerror = function () { script.remove(); done(false); };
+    (document.head || document.documentElement).appendChild(script);
+  }
+  function flushBridgeCallbacks(ok) {
+    var callbacks = draftBridgeState.callbacks.splice(0);
+    for (var i = 0; i < callbacks.length; i++) callbacks[i](ok);
+  }
+  function ensureDraftBridge(done) {
+    if (draftBridgeState.ready) { done(true); return; }
+    draftBridgeState.callbacks.push(done);
+    if (draftBridgeState.loading) return;
+    draftBridgeState.loading = true;
+    // x-dom stays the selector source of truth in both extension worlds.
+    injectPageScript("lib/x-dom.js", function (domLoaded) {
+      if (!domLoaded) { draftBridgeState.loading = false; flushBridgeCallbacks(false); return; }
+      injectPageScript("content/draft-bridge.js", function (bridgeLoaded) {
+        if (!bridgeLoaded) { draftBridgeState.loading = false; flushBridgeCallbacks(false); return; }
+        // The bridge emits READY during evaluation. If a fast browser emitted
+        // it before onload, its listener has already set `ready` below.
+        setTimeout(function () {
+          draftBridgeState.loading = false;
+          flushBridgeCallbacks(draftBridgeState.ready);
+        }, 0);
+      });
+    });
+  }
+  document.addEventListener(DRAFT_BRIDGE_READY, function () { draftBridgeState.ready = true; }, false);
+  document.addEventListener(DRAFT_BRIDGE_RESPONSE, function (event) {
+    var message;
+    try { message = JSON.parse(event.detail || "{}"); } catch (_) { return; }
+    var pending = message && draftBridgeState.pending[message.id];
+    if (!pending) return;
+    delete draftBridgeState.pending[message.id];
+    pending(!!(message.payload && message.payload.ok));
+  }, false);
+  function insertDraft(text, el, options) {
+    el = el || (D.getComposer ? D.getComposer() : document.querySelector(D.SELECTORS.composer));
+    if (!el || !text) return Promise.resolve(false);
     try { el.focus(); } catch (_) {}
-    var ok = false;
-    try { ok = document.execCommand("insertText", false, text); } catch (_) { ok = false; }
-    if (!ok) {
-      // X's editor handles paste events even when synthetic input events are ignored.
-      try {
-        var dt = new DataTransfer();
-        dt.setData("text/plain", text);
-        var evt = new ClipboardEvent("paste", {
-          clipboardData: dt, bubbles: true, cancelable: true
-        });
-        // WebKit drops clipboardData passed to the constructor. Dispatching a
-        // payload-less paste would let X cancel it and insert nothing, so we'd
-        // wrongly count it as done and skip the InputEvent fallback below.
-        if (evt.clipboardData === dt) ok = !el.dispatchEvent(evt);
-      } catch (_) { ok = false; }
-    }
-    if (!ok) {
-      try {
-        el.dispatchEvent(new InputEvent("beforeinput", {
-          inputType: "insertText", data: text, bubbles: true, cancelable: true
-        }));
-        el.dispatchEvent(new InputEvent("input", {
-          inputType: "insertText", data: text, bubbles: true
-        }));
-        ok = true;
-      } catch (e) {
-        try { console.warn("[xverim] insertDraft fallback failed:", e); } catch (_) {}
-      }
-    }
-    return ok;
+    return new Promise(function (resolve) {
+      ensureDraftBridge(function (ready) {
+        if (!ready) { try { console.warn("[xverim] Draft.js page bridge unavailable; draft not inserted"); } catch (_) {} resolve(false); return; }
+        var id = "xverim-draft-" + (draftBridgeState.nextId++);
+        var timeout = setTimeout(function () {
+          if (!draftBridgeState.pending[id]) return;
+          delete draftBridgeState.pending[id];
+          resolve(false);
+        }, 1500);
+        draftBridgeState.pending[id] = function (ok) {
+          clearTimeout(timeout);
+          resolve(ok && composerHasText(el, text));
+        };
+        try {
+          document.dispatchEvent(new CustomEvent(DRAFT_BRIDGE_REQUEST, {
+            detail: JSON.stringify({
+              id: id,
+              text: String(text),
+              composerIndex: composerIndex(el),
+              inDialog: !!(el.closest && el.closest('[role="dialog"]')),
+              requireComposePost: !!(options && options.requireComposePost)
+            })
+          }));
+        } catch (_) {
+          clearTimeout(timeout);
+          delete draftBridgeState.pending[id];
+          resolve(false);
+        }
+      });
+    });
   }
 
   // Wait for the composer to mount. Spec: rAF for the first 10 ticks, then
@@ -199,7 +310,50 @@
       try { console.warn("[xverim] composer not found after waiting"); } catch (_) {}
       return false;
     }
-    return insertDraft(text);
+    return insertDraft(text, composer);
+  }
+
+  // X opens a reply on /compose/post, inside its real dialog. Do not use an
+  // active/new/single-composer fallback here: the homepage's permanent "What is
+  // happening?" editor satisfies each of those heuristics at the wrong moment.
+  function resolveReplyComposer() {
+    if (window.location.pathname !== "/compose/post") return null;
+    var all;
+    try { all = Array.prototype.slice.call(document.querySelectorAll(D.SELECTORS.composer)); } catch (_) { all = []; }
+    if (!all.length) return null;
+    for (var i = 0; i < all.length; i++) {
+      var dialog = all[i].closest && all[i].closest('[role="dialog"]');
+      var inRealDialog = dialog && !(dialog.classList.contains("xverim-panel") || dialog.classList.contains("xverim-popover"))
+        && dialog.getClientRects && dialog.getClientRects().length;
+      if (inRealDialog && all[i].getClientRects && all[i].getClientRects().length) return all[i];
+    }
+    return null;
+  }
+  function waitForReplyComposer(maxMs) {
+    return new Promise(function (resolve) {
+      var startedAt = Date.now();
+      function attempt() {
+        var el = resolveReplyComposer();
+        if (el) { resolve(el); return; }
+        if (Date.now() - startedAt < maxMs) setTimeout(attempt, 100);
+        else resolve(null);
+      }
+      attempt();
+    });
+  }
+
+  // Open the focused tweet's reply composer and drop a ready draft into it.
+  // Same "click reply, never click submit" contract as the r shortcut — the
+  // human still presses the button. Used by the Analyze popover's Yanıtla.
+  function replyWithText(article, text) {
+    if (!article || !text) return;
+    var rb = D.getReplyButton ? D.getReplyButton(article) : null;
+    if (rb) { try { rb.click(); } catch (_) {} }
+
+    waitForReplyComposer(5000).then(function (el) {
+      if (!el) { try { console.warn("[xverim] reply composer not found"); } catch (_) {} return; }
+      insertDraft(text, el, { requireComposePost: true });
+    });
   }
 
   // ============== Filter ==============
@@ -313,6 +467,9 @@
     if (state.focusedTweet) {
       state.focusedTweet.classList.add("xverim-focused");
       scrollArticleIntoView(state.focusedTweet);
+      // Hold this pick through the smooth scroll so applyFocus doesn't retarget
+      // to a tweet we're only scrolling past.
+      state.focusLockUntil = Date.now() + (REDUCED_MOTION ? 120 : 480);
     }
     updateFocusBadge();
   }
@@ -356,12 +513,14 @@
           text: D.getTweetText(focused),
           authorHandle: D.getAuthorHandle(focused)
         };
-        waitForComposer(2500, 250).then(function (composer) {
+        waitForReplyComposer(5000).then(function (composer) {
           if (!composer) { try { console.warn("[xverim] reply composer not found"); } catch (_) {} return; }
           try {
             chrome.runtime.sendMessage({ type: "AI_DRAFT", payload: tweet }, function (resp) {
               var err = chrome.runtime.lastError;
-              if (!err && resp && resp.ok) insertDraft(resp.data);
+              // Keep the exact reply composer captured above. It is never
+              // replaced by the timeline's persistent "new post" editor.
+              if (!err && resp && resp.ok && composer.isConnected) insertDraft(resp.data, composer, { requireComposePost: true });
               else try { console.warn("[xverim] AI_DRAFT failed:", (err && err.message) || (resp && resp.error)); } catch (_) {}
             });
           } catch (_) {}
@@ -370,24 +529,7 @@
       }
       case "analyze": {
         if (!focused) return;
-        var payload = {
-          text: D.getTweetText(focused),
-          authorHandle: D.getAuthorHandle(focused),
-          counts: D.getCountsFromGroup(focused)
-        };
-        // Immediate feedback while the API call is in flight.
-        showAnalyzePopover(focused, { take: "Analyzing…", whyPerforming: "", replyAngles: [] });
-        try {
-          chrome.runtime.sendMessage({ type: "AI_ANALYZE", payload: payload }, function (resp) {
-            var err = chrome.runtime.lastError;
-            if (!err && resp && resp.ok) showAnalyzePopover(focused, resp.data);
-            else showAnalyzePopover(focused, {
-              take: "Error",
-              whyPerforming: String((err && err.message) || (resp && resp.error) || "unknown"),
-              replyAngles: []
-            });
-          });
-        } catch (_) {}
+        runAnalyze(focused);
         return;
       }
       case "togglePanel": return togglePanel();
@@ -558,6 +700,20 @@
   var CHECK_ICON = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">'
     + '<path d="M3 8.5 L6.5 12 L13 4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
     + '</svg>';
+  var CLOSE_ICON = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">'
+    + '<path d="M3.5 3.5 L12.5 12.5 M12.5 3.5 L3.5 12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>'
+    + '</svg>';
+  var REFRESH_ICON = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">'
+    + '<path d="M13.2 8a5.2 5.2 0 1 1-1.5-3.7" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>'
+    + '<path d="M13.5 2.6v3h-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+    + '</svg>';
+  var REPLY_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">'
+    + '<path d="M6.5 4 L3 7.5 L6.5 11" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+    + '<path d="M3 7.5 H9 A3.5 3.5 0 0 1 12.5 11 V12" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+    + '</svg>';
+  var SPARK_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">'
+    + '<path d="M8 1.5 L9.4 5.1 L13 6.5 L9.4 7.9 L8 11.5 L6.6 7.9 L3 6.5 L6.6 5.1 Z" fill="currentColor"/>'
+    + '</svg>';
 
   // getText is a function so callers can defer reading DOM text until click time.
   function bindCopyButton(btn, getText) {
@@ -586,75 +742,235 @@
       state.popoverEl.parentNode.removeChild(state.popoverEl);
     }
     state.popoverEl = null;
+    state.popoverArticle = null;
   }
-  function showAnalyzePopover(article, data) {
-    closePopover();
+
+  // Kick off (or re-run) the AI pass for a tweet and drive the popover through
+  // its loading / error / result states. The regenerate button reuses this.
+  function runAnalyze(article) {
     if (!article) return;
-    var r = article.getBoundingClientRect();
-    var pop = document.createElement("div");
-    pop.className = "xverim-popover";
-    pop.setAttribute("role", "dialog");
-    // Copy buttons are only useful once there's real content — not during
-    // the "Analyzing…" placeholder or an error state.
-    var canCopyTake = !!data.take && data.take !== "Analyzing…" && data.take !== "Error";
-    pop.innerHTML = ''
-      + '<button class="xverim-popover-close" aria-label="Close">'
-      +   '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">'
-      +     '<path d="M3.5 3.5 L12.5 12.5 M12.5 3.5 L3.5 12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>'
-      +   '</svg>'
-      + '</button>'
-      + '<div class="xverim-popover-section">'
-      +   '<div class="xverim-popover-label-row">'
-      +     '<span class="xverim-popover-label">Take</span>'
-      +     (canCopyTake ? '<button type="button" class="xverim-copy-btn" data-copy="take" aria-label="Copy take" title="Copy">' + COPY_ICON + '</button>' : '')
-      +   '</div>'
-      +   '<div class="xverim-popover-body" data-bind="take"></div>'
-      + '</div>'
-      + '<div class="xverim-popover-section">'
-      +   '<div class="xverim-popover-label">Why performing</div>'
-      +   '<div class="xverim-popover-body" data-bind="why"></div>'
-      + '</div>'
-      + '<div class="xverim-popover-section">'
-      +   '<div class="xverim-popover-label">Reply drafts</div>'
-      +   '<ul class="xverim-popover-list" data-bind="angles"></ul>'
-      + '</div>';
-    pop.querySelector(".xverim-popover-close").addEventListener("click", closePopover);
-    var takeText = data.take || "—";
-    pop.querySelector("[data-bind='take']").textContent = takeText;
-    pop.querySelector("[data-bind='why']").textContent = data.whyPerforming || "—";
-    if (canCopyTake) {
-      bindCopyButton(pop.querySelector("[data-copy='take']"), function () { return takeText; });
+    var payload = {
+      text: D.getTweetText(article),
+      authorHandle: D.getAuthorHandle(article),
+      counts: D.getCountsFromGroup(article)
+    };
+    showAnalyzePopover(article, { status: "loading" });
+    try {
+      chrome.runtime.sendMessage({ type: "AI_ANALYZE", payload: payload }, function (resp) {
+        var err = chrome.runtime.lastError;
+        if (!err && resp && resp.ok) showAnalyzePopover(article, resp.data || {});
+        else showAnalyzePopover(article, {
+          status: "error",
+          message: String((err && err.message) || (resp && resp.error) || "unknown")
+        });
+      });
+    } catch (e) {
+      showAnalyzePopover(article, { status: "error", message: String((e && e.message) || e) });
     }
-    var ul = pop.querySelector("[data-bind='angles']");
-    (data.replyAngles || []).forEach(function (a) {
-      var li = document.createElement("li");
-      var span = document.createElement("span");
-      span.className = "xverim-popover-angle-text";
-      span.textContent = a;
-      var copyBtn = document.createElement("button");
-      copyBtn.type = "button";
-      copyBtn.className = "xverim-copy-btn";
-      copyBtn.setAttribute("aria-label", "Copy reply draft");
-      copyBtn.title = "Copy";
-      copyBtn.innerHTML = COPY_ICON;
-      bindCopyButton(copyBtn, function () { return a; });
-      li.appendChild(span);
-      li.appendChild(copyBtn);
-      ul.appendChild(li);
+  }
+
+  // Shimmer placeholder shown while the model responds — reads as "working"
+  // far better than a line of text, and keeps the card from resizing on arrival.
+  function buildSkeleton() {
+    var sk = document.createElement("div");
+    sk.className = "xverim-skeleton";
+    sk.setAttribute("aria-label", "Hazırlanıyor");
+    var rows = [
+      { cls: "xverim-sk-line", w: "42%" },
+      { cls: "xverim-sk-card" },
+      { cls: "xverim-sk-card" },
+      { cls: "xverim-sk-card" }
+    ];
+    rows.forEach(function (row) {
+      var el = document.createElement("div");
+      el.className = row.cls;
+      if (row.w) el.style.width = row.w;
+      if (row.h) el.style.height = row.h;
+      if (row.mt) el.style.marginTop = row.mt;
+      sk.appendChild(el);
     });
-    (document.body || document.documentElement).appendChild(pop);
-    // Position next to the article, clamped to viewport.
-    var pw = 320;
+    return sk;
+  }
+
+  // One reply draft as a self-contained card: the draft (in the tweet's
+  // language), its translation underneath, a live char count, and the primary
+  // "Yanıtla" (insert into composer) + secondary copy action. Only the draft
+  // text is ever posted or copied — the translation is just to read.
+  function buildReplyCard(article, reply) {
+    var text = (reply && reply.text) || "";
+    var translation = (reply && reply.translation ? String(reply.translation) : "").trim();
+
+    var li = document.createElement("li");
+
+    var span = document.createElement("span");
+    span.className = "xverim-popover-angle-text";
+    span.textContent = text;
+    li.appendChild(span);
+
+    if (translation && translation !== text) {
+      var tr = document.createElement("span");
+      tr.className = "xverim-popover-angle-tr";
+      tr.textContent = translation;
+      li.appendChild(tr);
+    }
+
+    var actions = document.createElement("span");
+    actions.className = "xverim-popover-angle-actions";
+
+    var count = document.createElement("span");
+    count.className = "xverim-char-count";
+    var len = text.length;
+    count.textContent = len;
+    if (len > 280) count.classList.add("xverim-char-over");
+    else if (len > 240) count.classList.add("xverim-char-warn");
+
+    var group = document.createElement("span");
+    group.className = "xverim-popover-btn-group";
+
+    // Primary: drop the draft straight into X's reply composer.
+    var replyBtn = document.createElement("button");
+    replyBtn.type = "button";
+    replyBtn.className = "xverim-reply-btn";
+    replyBtn.innerHTML = REPLY_ICON + '<span>Yanıtla</span>';
+    replyBtn.title = "Bu taslakla yanıt kutusunu aç";
+    replyBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      closePopover();
+      replyWithText(article, text);
+    });
+
+    // Secondary: copy, for when you'd rather paste it elsewhere.
+    var copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "xverim-copy-btn";
+    copyBtn.setAttribute("aria-label", "Kopyala");
+    copyBtn.title = "Kopyala";
+    copyBtn.innerHTML = COPY_ICON;
+    bindCopyButton(copyBtn, function () { return text; });
+
+    group.appendChild(replyBtn);
+    group.appendChild(copyBtn);
+    actions.appendChild(count);
+    actions.appendChild(group);
+    li.appendChild(actions);
+    return li;
+  }
+
+  // Build just the scrollable content region for a given data object. Kept
+  // separate so re-runs can swap it in place without tearing down and
+  // repositioning the whole card (that's what makes the reload feel smooth).
+  function buildPopoverContent(article, data) {
+    var content = document.createElement("div");
+    content.className = "xverim-popover-content";
+    content.setAttribute("data-bind", "content");
+
+    var status = data.status;  // "loading" | "error" | undefined (=result)
+    // Replies are {text, translation}; tolerate a bare string too.
+    var replies = Array.isArray(data.replies) ? data.replies.map(function (r) {
+      if (r && typeof r === "object") {
+        return { text: String(r.text || "").trim(), translation: String(r.translation || "").trim() };
+      }
+      return { text: String(r || "").trim(), translation: "" };
+    }).filter(function (r) { return r.text; }) : [];
+
+    if (status === "loading") {
+      content.appendChild(buildSkeleton());
+      return content;
+    }
+    if (status === "error") {
+      var errEl = document.createElement("div");
+      errEl.className = "xverim-popover-status xverim-popover-error";
+      errEl.textContent = "Bir sorun oldu: " + (data.message || "bilinmeyen hata");
+      content.appendChild(errEl);
+      return content;
+    }
+
+    var rSection = document.createElement("div");
+    rSection.className = "xverim-popover-section";
+    var rLabel = document.createElement("div");
+    rLabel.className = "xverim-popover-label";
+    rLabel.textContent = "Yanıt taslakları";
+    rSection.appendChild(rLabel);
+
+    if (!replies.length) {
+      var none = document.createElement("div");
+      none.className = "xverim-popover-empty";
+      none.textContent = "Taslak üretilemedi — ↻ ile tekrar deneyin.";
+      rSection.appendChild(none);
+    } else {
+      var ul = document.createElement("ul");
+      ul.className = "xverim-popover-list";
+      replies.forEach(function (reply) { ul.appendChild(buildReplyCard(article, reply)); });
+      rSection.appendChild(ul);
+    }
+    content.appendChild(rSection);
+    return content;
+  }
+
+  // Anchor the card to the right of the tweet, flipping / clamping to stay in
+  // the viewport. Called on open and after any in-place content swap.
+  function repositionPopover(pop, article) {
+    if (!pop || !article) return;
+    var r = article.getBoundingClientRect();
+    var pw = pop.offsetWidth || 340;
     var ph = pop.offsetHeight || 200;
-    var left = window.scrollX + r.right + 8;
+    var left = window.scrollX + r.right + 10;
     var top = window.scrollY + r.top;
-    if (left + pw > window.scrollX + window.innerWidth - 8) left = window.scrollX + r.left - pw - 8;
+    if (left + pw > window.scrollX + window.innerWidth - 8) left = window.scrollX + r.left - pw - 10;
     if (left < window.scrollX + 8) left = window.scrollX + 8;
     if (top + ph > window.scrollY + window.innerHeight - 8) top = window.scrollY + window.innerHeight - ph - 8;
     if (top < window.scrollY + 8) top = window.scrollY + 8;
     pop.style.left = left + "px";
     pop.style.top = top + "px";
+  }
+
+  function showAnalyzePopover(article, data) {
+    if (!article) return;
+    data = data || {};
+
+    // Re-run on the same tweet while the card is open (loading → result, or the
+    // ↻ button): swap only the content so the card never flashes or jumps.
+    if (state.popoverEl && state.popoverArticle === article && state.popoverEl.isConnected) {
+      var open = state.popoverEl;
+      var old = open.querySelector("[data-bind='content']");
+      var fresh = buildPopoverContent(article, data);
+      if (old && old.parentNode) old.parentNode.replaceChild(fresh, old);
+      else open.appendChild(fresh);
+      repositionPopover(open, article);
+      return;
+    }
+
+    closePopover();
+
+    var pop = document.createElement("div");
+    pop.className = "xverim-popover";
+    pop.setAttribute("role", "dialog");
+    pop.setAttribute("aria-label", "X Verim öneriler");
+
+    var header = document.createElement("div");
+    header.className = "xverim-popover-header";
+    header.innerHTML = ''
+      + '<span class="xverim-popover-title">' + SPARK_ICON + '<span>Öneriler</span></span>'
+      + '<span class="xverim-popover-header-actions">'
+      +   '<button type="button" class="xverim-icon-btn" data-act="regen" aria-label="Yeniden üret" title="Yeniden üret">' + REFRESH_ICON + '</button>'
+      +   '<button type="button" class="xverim-icon-btn" data-act="close" aria-label="Kapat" title="Kapat">' + CLOSE_ICON + '</button>'
+      + '</span>';
+
+    header.querySelector("[data-act='close']").addEventListener("click", closePopover);
+    header.querySelector("[data-act='regen']").addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      runAnalyze(article);
+    });
+
+    pop.appendChild(header);
+    pop.appendChild(buildPopoverContent(article, data));
+
+    (document.body || document.documentElement).appendChild(pop);
     state.popoverEl = pop;
+    state.popoverArticle = article;
+    repositionPopover(pop, article);
   }
   // Click outside / Esc dismisses the popover.
   document.addEventListener("mousedown", function (e) {

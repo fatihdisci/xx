@@ -4,7 +4,7 @@ A personal-use Chrome extension (Manifest V3, load-unpacked) that speeds up a si
 
 - **Keyboard navigation** — `j` / `k` for vim-style focus on the timeline
 - **One-key actions** — `l` like, `s` bookmark, `f` follow on the focused tweet
-- **AI assist** — post ideas, reply drafts, and tweet analysis via OpenAI (gpt-5-nano)
+- **AI assist** — post ideas, reply drafts, and tweet analysis via DeepSeek
 - **Niche filter** — dim / hide tweets by keyword or author, highlight on include matches
 - **Pace guardrail** — non-blocking banner if hourly like / follow limits are exceeded
 
@@ -12,13 +12,13 @@ A personal-use Chrome extension (Manifest V3, load-unpacked) that speeds up a si
 
 1. **No unattended automation.** Like, follow, reply, and post always require a human keypress or click. The extension only inserts text into the composer; it never clicks the submit button.
 2. **Selector discipline.** Every X query uses `data-testid`, `role`, or `aria-label` only. CSS class names (e.g. `css-1dbjc4n`) are not used — they change weekly.
-3. **No telemetry.** Nothing leaves your machine except calls to `api.openai.com` (only the persona + tweet text you explicitly submit).
+3. **No telemetry.** Nothing leaves your machine except calls to `api.deepseek.com` (only the persona + tweet text you explicitly submit).
 4. **Personal use, no Web Store.** This is a load-unpacked extension for one person. Don't publish it.
 
 ## Install (Chrome)
 
 1. Edit `config.js` and fill in:
-   - `OPENAI_API_KEY`
+   - `DEEPSEEK_API_KEY`
    - `PERSONA.identity` / `niche` / `tone`
    - Optional: `FILTER.keywordsInclude` / `keywordsExclude` / `mutedAuthors` / `highlightMinLikes`
 2. Open `chrome://extensions`, turn on **Developer mode** (top right).
@@ -111,7 +111,7 @@ guards it — under Safari `config.js` is already loaded by the `scripts` array.
 | `s` | Bookmark |
 | `f` | Follow the author (if not already following) |
 | `r` | Open reply composer and insert an AI draft |
-| `a` | Show AI analysis popover (take, why it's performing, reply angles) |
+| `a` | Show AI popover: ready reply drafts (each with a Turkish translation) you can drop straight into the composer |
 | `v` | Toggle the floating panel |
 
 Shortcuts are ignored while you're typing in an `input`, `textarea`, or any `contenteditable` region.
@@ -163,7 +163,7 @@ The DOM helper functions in the same file (`getTweetArticle`, `getTweetText`, `g
 x-verim/
 ├── manifest.json           MV3 manifest (storage perm only)
 ├── config.js               Personal config — NOT committed
-├── background.js           OpenAI + guardrail counters (SW on Chrome, event page on Safari)
+├── background.js           DeepSeek + guardrail counters (SW on Chrome, event page on Safari)
 ├── lib/x-dom.js            SELECTORS + DOM helpers
 ├── content/
 │   ├── content.js          Focus model, shortcuts, filter, panel, popover
@@ -182,9 +182,9 @@ x-verim-safari/             Safari wrapper — references ../x-verim, no copies
 
 ## Privacy
 
-- `OPENAI_API_KEY` is read in `background.js` only. It is never sent to content scripts or the popup.
+- `DEEPSEEK_API_KEY` is read in `background.js` only. It is never sent to content scripts or the popup.
 - Outgoing network calls:
-  - `api.openai.com/chat/completions` (only when you press a Generate / Draft / Analyze button)
+  - `api.deepseek.com/chat/completions` (only when you press a Generate / Draft / Analyze button)
   - No analytics, no third-party SDK, no telemetry.
 - All data (panel position, guardrail counters, filter toggle) lives in `chrome.storage.local` on your machine.
 - On Safari the key ships **inside the built `X Verim.app`**, so the rule there is
