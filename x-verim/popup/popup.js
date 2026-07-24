@@ -50,9 +50,29 @@
     } catch (_) { return false; }
   }
 
-  function setBusy(root, label) {
-    if (!root) return;
-    root.textContent = label;
+  // A popup is 380px of chrome-owned window; a native alert() on top of it is
+  // a modal for a message that is never worth one. Everything reports here.
+  var statusTimer = null;
+  function setStatus(message, kind, ms) {
+    var el = $("popup-status");
+    if (!el) return;
+    el.textContent = message || "";
+    el.className = "xverim-status" + (message ? " visible" : "") + (kind ? " " + kind : "");
+    if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+    if (message && ms !== 0) statusTimer = setTimeout(function () { setStatus(""); }, ms || 3600);
+  }
+
+  // Same shimmer language as the timeline card, so waiting looks the same in
+  // both surfaces — and the panel doesn't collapse to one line of text.
+  function renderSkeleton(count) {
+    var root = $("suggest-result");
+    root.innerHTML = "";
+    var n = Math.max(1, Math.min(10, count || 3));
+    for (var i = 0; i < n; i++) {
+      var sk = document.createElement("div");
+      sk.className = "xverim-sk-card";
+      root.appendChild(sk);
+    }
   }
 
   var TWEET_LIMIT = 280;
@@ -83,24 +103,26 @@
       var n = body.value.length;
       count.textContent = n + " / " + TWEET_LIMIT;
       count.classList.toggle("over", n > TWEET_LIMIT);
+      count.classList.toggle("near", n <= TWEET_LIMIT && n > TWEET_LIMIT - 40);
     }
     body.addEventListener("input", function () { refreshCount(); autoGrow(); });
 
     var copy = document.createElement("button");
     copy.type = "button";
     copy.className = "xverim-btn small";
-    copy.textContent = "Copy";
+    copy.textContent = "Kopyala";
     copy.addEventListener("click", function () {
       copyToClipboard(body.value).then(function (ok) {
-        copy.textContent = ok ? "Copied" : "Failed";
-        setTimeout(function () { copy.textContent = "Copy"; }, 1200);
+        copy.textContent = ok ? "Kopyalandı" : "Olmadı";
+        setTimeout(function () { copy.textContent = "Kopyala"; }, 1200);
       });
     });
 
     var open = document.createElement("button");
     open.type = "button";
     open.className = "xverim-btn small primary";
-    open.textContent = "Open in composer";
+    open.textContent = "Kutuya koy";
+    open.title = "x.com sekmesinde gönderi kutusunu açar ve metni yerleştirir";
     open.addEventListener("click", function () { openInComposer(body.value); });
 
     actions.appendChild(count);
@@ -115,35 +137,64 @@
     return card;
   }
 
+  // Kept so a regenerate can tell the model what it already said.
+  var lastItems = [];
+
   function renderSuggest(items) {
     var root = $("suggest-result");
     root.innerHTML = "";
-    if (!items || !items.length) { root.textContent = "No ideas returned."; return; }
+    if (!items || !items.length) {
+      var empty = document.createElement("div");
+      empty.className = "xverim-empty";
+      empty.textContent = "Fikir çıkmadı. Konuyu biraz daralt ya da tekrar üret.";
+      root.appendChild(empty);
+      return;
+    }
     for (var i = 0; i < items.length; i++) root.appendChild(makeIdeaCard(items[i]));
   }
 
   async function openInComposer(text) {
+    if (!text || !text.trim()) { setStatus("Kart boş.", "warn"); return; }
     var tab = await activeXTab();
-    if (!tab) { alert("Open an x.com tab first, then click this button."); return; }
+    if (!tab) { setStatus("Önce bir x.com sekmesi aç, sonra tekrar dene.", "warn"); return; }
+    setStatus("Gönderi kutusu açılıyor…", null, 0);
     try {
       chrome.tabs.sendMessage(tab.id, { type: "OPEN_COMPOSER_WITH_TEXT", text: text }, function (resp) {
         if (chrome.runtime.lastError) {
-          alert("Content script not reachable on this tab.");
+          setStatus("Bu sekmede eklenti çalışmıyor — sayfayı yenile.", "error");
           return;
         }
-        if (!resp || !resp.ok) alert("Could not open composer. Click the page first, then retry.");
+        if (!resp || !resp.ok) setStatus("Kutu açılamadı. Sayfaya bir tıkla ve tekrar dene.", "error");
         else window.close();
       });
     } catch (e) {
-      alert("Could not reach the content script: " + String((e && e.message) || e));
+      setStatus("İçerik betiğine ulaşılamadı: " + String((e && e.message) || e), "error");
     }
   }
 
+  function paintMeter(kind, value, limit) {
+    var num = $("cnt-" + kind);
+    var suffix = $("lim-" + kind);
+    var bar = $("bar-" + kind);
+    if (num) num.textContent = String(value);
+    if (suffix) suffix.textContent = limit ? (" / " + limit) : "";
+    if (!bar) return;
+    var ratio = limit > 0 ? Math.min(1, value / limit) : 0;
+    bar.style.width = Math.round(ratio * 100) + "%";
+    bar.className = ratio >= 1 ? "over" : (ratio >= 0.75 ? "near" : "");
+  }
+
+  // The popup never loads config.js, so the thresholds come from the background
+  // (counts alone don't say whether you are anywhere near the line).
   function loadCounts() {
-    bgRequest({ type: "GET_COUNTS" }).then(function (resp) {
-      if (!resp || !resp.ok) return;
-      $("cnt-likes").textContent = String((resp.data && resp.data.likes) || 0);
-      $("cnt-follows").textContent = String((resp.data && resp.data.follows) || 0);
+    Promise.all([
+      bgRequest({ type: "GET_COUNTS" }),
+      bgRequest({ type: "GET_LIMITS" })
+    ]).then(function (res) {
+      var counts = (res[0] && res[0].ok && res[0].data) || {};
+      var limits = (res[1] && res[1].ok && res[1].data) || {};
+      paintMeter("likes", counts.likes || 0, Number(limits.likes) || 0);
+      paintMeter("follows", counts.follows || 0, Number(limits.follows) || 0);
     });
   }
 
@@ -186,21 +237,28 @@
     if (btn.disabled) return;
     var topic = $("suggest-topic").value.trim();
     var count = parseInt($("suggest-count").value, 10) || 5;
+    if (count < 1) count = 1;
+    if (count > 10) count = 10;
     var style = $("suggest-style").value;
     savePrefs({ topic: topic, count: count, style: style });
 
     btn.disabled = true;
-    btn.textContent = "Generating…";
-    setBusy($("suggest-result"), "Generating…");
-    bgRequest({ type: "AI_SUGGEST", payload: { topic: topic, count: count, style: style } })
+    btn.textContent = "Üretiliyor…";
+    setStatus("");
+    renderSkeleton(count);
+    // Re-runs ask for something new rather than the same list reworded.
+    bgRequest({ type: "AI_SUGGEST", payload: { topic: topic, count: count, style: style, previous: lastItems } })
       .then(function (resp) {
         btn.disabled = false;
-        btn.textContent = "Regenerate";
+        btn.textContent = "Yeniden üret";
         if (!resp || !resp.ok) {
-          $("suggest-result").textContent = "Error: " + ((resp && resp.error) || "unknown");
+          $("suggest-result").innerHTML = "";
+          setStatus((resp && resp.error) || "Bilinmeyen hata", "error", 0);
           return;
         }
-        renderSuggest(resp.data || []);
+        var items = resp.data || [];
+        lastItems = lastItems.concat(items).slice(-10);
+        renderSuggest(items);
       });
   }
 
@@ -212,12 +270,18 @@
     $("filter-enabled").addEventListener("change", function (e) {
       var v = !!e.target.checked;
       try { chrome.storage.local.set({ xverim_filter_enabled: v }); } catch (_) {}
+      setStatus(v ? "Niş filtresi açık." : "Niş filtresi kapalı.", null, 1600);
     });
 
     $("suggest-go").addEventListener("click", generate);
     // Enter in the topic field generates, so the common path needs no mouse.
     $("suggest-topic").addEventListener("keydown", function (e) {
       if (e.key === "Enter") { e.preventDefault(); generate(); }
+    });
+    // …and Cmd/Ctrl+Enter works from anywhere in the popup, including from
+    // inside an idea card you just finished editing.
+    document.addEventListener("keydown", function (e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); generate(); }
     });
   }
 

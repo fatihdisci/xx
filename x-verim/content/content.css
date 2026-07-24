@@ -114,20 +114,73 @@
 }
 .xverim-toggle input { cursor: pointer; }
 
-.xverim-counters { display: flex; gap: 8px; flex-wrap: wrap; }
-.xverim-counter {
+/* Pace meters — a bar says "how close am I" at a glance; a bare number doesn't. */
+.xverim-meter-row { margin-bottom: 9px; }
+.xverim-meter-row:last-child { margin-bottom: 0; }
+.xverim-meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #8b98a5;
+  margin-bottom: 5px;
+}
+.xverim-meter-head b {
+  color: #e7e9ea;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.xverim-meter {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.xverim-meter i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: #1d9bf0;
+  transition: width 220ms ease, background 220ms ease;
+}
+.xverim-meter i.xverim-near { background: #ffd400; }
+.xverim-meter i.xverim-over { background: #f4212e; }
+
+/* Shortcut cheat sheet — collapsed by default, so it teaches without nagging. */
+.xverim-keys { margin-bottom: 0; }
+.xverim-keys > summary {
+  cursor: pointer;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #71767b;
+  outline: none;
+  list-style: none;
+  padding: 2px 0;
+}
+.xverim-keys > summary::-webkit-details-marker { display: none; }
+.xverim-keys > summary:hover { color: #e7e9ea; }
+.xverim-keys[open] > summary { color: #e7e9ea; margin-bottom: 6px; }
+.xverim-key-list { display: flex; flex-direction: column; gap: 5px; }
+.xverim-key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #b3bcc4;
+}
+.xverim-kbd {
+  flex: 0 0 auto;
+  min-width: 32px;
+  text-align: center;
   background: #202327;
   border: 1px solid #2f3336;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 2px 5px;
+  font: 700 10.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   color: #e7e9ea;
-  cursor: default;
-}
-.xverim-counter b {
-  color: #1d9bf0;
-  font-weight: 700;
-  margin-right: 4px;
 }
 
 /* ---------- Analyze popover ---------- */
@@ -236,17 +289,50 @@
   color: #6e7b88;
   margin-bottom: 7px;
 }
-.xverim-popover-translation {
-  color: #d7dbdf;
-  font-size: 13.5px;
-  line-height: 1.5;
-  word-break: break-word;
+/* Which tweet am I answering — one clamped line under the header. */
+.xverim-popover-source {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 7px 10px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-left: 3px solid #1d9bf0;
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-left: 2px solid rgba(29, 155, 240, 0.55);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  min-width: 0;
 }
+.xverim-popover-source-handle { color: #1d9bf0; font-weight: 700; flex: 0 0 auto; }
+.xverim-popover-source-text {
+  color: #8b98a5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.xverim-popover-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #5c6773;
+  text-align: center;
+}
+
+.xverim-ghost-btn {
+  display: block;
+  margin: 10px auto 0;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e7e9ea;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.xverim-ghost-btn:hover { background: rgba(29, 155, 240, 0.12); border-color: rgba(29, 155, 240, 0.5); }
 
 .xverim-popover-list { margin: 0; padding-left: 0; list-style: none; color: #e7e9ea; }
 .xverim-popover-list li {
@@ -272,12 +358,35 @@
 .xverim-popover-list li:nth-child(4) { animation-delay: 195ms; }
 .xverim-popover-list li:nth-child(5) { animation-delay: 250ms; }
 
-.xverim-popover-angle-text {
+/* Draft row: number chip + the editable draft itself. */
+.xverim-draft-top { display: flex; align-items: flex-start; gap: 8px; }
+.xverim-draft-index {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: rgba(29, 155, 240, 0.16);
+  color: #1d9bf0;
+  font: 700 10.5px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+}
+/* Editable, so a draft can be fixed where it is instead of copied out. */
+textarea.xverim-draft-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  resize: none;
+  overflow: hidden;
   color: #eef0f1;
-  font-size: 13.5px;
-  line-height: 1.5;
+  font: 13.5px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   word-break: break-word;
 }
+textarea.xverim-draft-text:focus { color: #fff; }
 /* Translation of the draft above, dimmer and set off by a left rule. */
 .xverim-popover-angle-tr {
   color: #8b98a5;
@@ -341,16 +450,47 @@
 
 /* Loading skeleton */
 .xverim-skeleton { padding: 2px 0; }
-.xverim-sk-line, .xverim-sk-block, .xverim-sk-card {
+.xverim-sk-line, .xverim-sk-card {
   border-radius: 8px;
   background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%);
   background-size: 680px 100%;
   animation: xverim-shimmer 1.25s ease-in-out infinite;
 }
 .xverim-sk-line { height: 10px; margin-bottom: 9px; }
-.xverim-sk-block { height: 44px; margin-bottom: 10px; }
 .xverim-sk-card { height: 74px; margin-bottom: 9px; border-radius: 12px; }
 .xverim-sk-card:last-child { margin-bottom: 0; }
+
+/* ---------- Toasts ---------- */
+/* Bottom-right, stacked, never blocking: the only feedback channel for things
+   that happen off-screen (a draft landing in the composer, an API failure). */
+.xverim-toasts {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 2147483647;
+  pointer-events: none;
+}
+.xverim-toast {
+  max-width: 320px;
+  background: #1a1d21;
+  color: #e7e9ea;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-left: 3px solid #1d9bf0;
+  border-radius: 10px;
+  padding: 9px 13px;
+  font: 12.5px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: xverim-card-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: auto;
+}
+.xverim-toast-ok { border-left-color: #00ba7c; }
+.xverim-toast-warn { border-left-color: #ffd400; }
+.xverim-toast-error { border-left-color: #f4212e; }
+.xverim-toast-out { opacity: 0; transform: translateY(4px); transition: opacity 160ms ease, transform 160ms ease; }
 
 /* ---------- Guardrail banner ---------- */
 .xverim-banner {
@@ -385,6 +525,19 @@
   border-radius: 4px;
 }
 .xverim-banner-close:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* ---------- Focus rings ---------- */
+/* Keyboard users get a visible target inside our own surfaces; mouse users
+   don't, and X's own focus styling is untouched. */
+.xverim-panel button:focus-visible,
+.xverim-panel input:focus-visible,
+.xverim-panel summary:focus-visible,
+.xverim-popover button:focus-visible,
+.xverim-popover textarea:focus-visible {
+  outline: 2px solid #1d9bf0;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {

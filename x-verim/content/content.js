@@ -21,6 +21,33 @@
   var FILTER = C.FILTER || { enabled: true };
   var REDUCED_MOTION = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
+  // config.js stays authoritative. These only fill in actions it never mentions,
+  // so a key deliberately set to "" is still disabled — and a config written
+  // before an action existed doesn't silently lose that action.
+  var DEFAULT_SHORTCUTS = {
+    focusNext: "j", focusPrev: "k", like: "l", bookmark: "s",
+    followAuthor: "f", replyWithDraft: "r", analyze: "a", togglePanel: "v"
+  };
+  for (var dsk in DEFAULT_SHORTCUTS) {
+    if (!Object.prototype.hasOwnProperty.call(SC, dsk)) SC[dsk] = DEFAULT_SHORTCUTS[dsk];
+  }
+  // Order here is the order of the panel's cheat sheet.
+  var ACTION_ORDER = ["focusNext", "focusPrev", "like", "bookmark", "followAuthor", "replyWithDraft", "analyze", "togglePanel"];
+  var ACTION_LABELS = {
+    focusNext: "Sonraki tweet",
+    focusPrev: "Önceki tweet",
+    like: "Beğen",
+    bookmark: "Yer işareti",
+    followAuthor: "Yazarı takip et",
+    replyWithDraft: "Yanıt kutusuna taslak",
+    analyze: "Yanıt taslakları",
+    togglePanel: "Paneli aç / kapat"
+  };
+  // Actions that do nothing without a tweet under the cursor.
+  var NEEDS_TWEET = {
+    like: true, bookmark: true, followAuthor: true, replyWithDraft: true, analyze: true
+  };
+
   // ============== State ==============
   var state = {
     articles: [],
@@ -35,12 +62,74 @@
     // After j/k jumps we lock the auto-pick briefly so the highlight lands on
     // the chosen tweet instead of flickering to whatever the smooth-scroll
     // passes over on the way there.
-    focusLockUntil: 0
+    focusLockUntil: 0,
+    // Drafts currently on screen, fed back to the model on ↻ so a re-run
+    // produces new angles instead of the same three sentences reworded.
+    popoverDrafts: [],
+    toastHost: null
   };
+
+  // ============== Toast ==============
+  // Short-lived line in the bottom-right corner. Every path that used to fail
+  // into console.warn now says something the human can actually see.
+  function ensureToastHost() {
+    if (state.toastHost && state.toastHost.isConnected) return state.toastHost;
+    var host = document.createElement("div");
+    host.className = "xverim-toasts";
+    host.setAttribute("role", "status");
+    host.setAttribute("aria-live", "polite");
+    (document.body || document.documentElement).appendChild(host);
+    state.toastHost = host;
+    return host;
+  }
+  // duration 0 keeps it up until update()/dismiss() — used for "working…" lines.
+  function showToast(message, opts) {
+    var o = opts || {};
+    var el = document.createElement("div");
+    el.className = "xverim-toast" + (o.kind ? " xverim-toast-" + o.kind : "");
+    el.textContent = message;
+    ensureToastHost().appendChild(el);
+
+    var timer = null;
+    function dismiss() {
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (!el.parentNode) return;
+      el.classList.add("xverim-toast-out");
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 180);
+    }
+    function schedule(ms) {
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (ms > 0) timer = setTimeout(dismiss, ms);
+    }
+    schedule(o.duration == null ? 2600 : o.duration);
+    return {
+      update: function (text, opts2) {
+        var o2 = opts2 || {};
+        el.textContent = text;
+        el.className = "xverim-toast" + (o2.kind ? " xverim-toast-" + o2.kind : "");
+        schedule(o2.duration == null ? 2600 : o2.duration);
+      },
+      dismiss: dismiss
+    };
+  }
 
   // ============== Focus model ==============
   function findAllArticles() {
     return Array.prototype.slice.call(document.querySelectorAll(D.SELECTORS.tweet));
+  }
+
+  // A tweet the filter removed still matches the selector, and a display:none
+  // element reports a 0×0 rect at the top of the page — which scored *better*
+  // than the tweet you were actually reading. Focus only ever considers the
+  // articles you can see.
+  function isFocusable(article) {
+    if (!article || !article.isConnected) return false;
+    if (article.classList.contains("xverim-hide")) return false;
+    var r = article.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+  function findFocusableArticles() {
+    return findAllArticles().filter(isFocusable);
   }
 
   // The active tweet is the one crossing a "reading line" a little above the
@@ -63,11 +152,12 @@
     // small band around it. That kills the flip-flop when two neighbours sit on
     // the boundary, and keeps j/k's pick even when a short tweet centred by the
     // jump doesn't quite reach the line.
-    if (current && current.isConnected && focusLineDist(current, vh, line) <= vh * 0.12) {
+    if (current && isFocusable(current) && focusLineDist(current, vh, line) <= vh * 0.12) {
       return current;
     }
     var best = null, bestDist = Infinity;
     for (var i = 0; i < articles.length; i++) {
+      if (!isFocusable(articles[i])) continue;
       var dist = focusLineDist(articles[i], vh, line);
       if (dist < bestDist) { bestDist = dist; best = articles[i]; }
     }
@@ -98,7 +188,10 @@
     if (state.focusBadgeEl) return state.focusBadgeEl;
     var el = document.createElement("div");
     el.className = "xverim-focus-badge";
-    el.textContent = "● Aktif tweet";
+    // The hint is what makes the badge teach the extension instead of just
+    // marking a tweet — and it follows the configured key, not a hardcoded "a".
+    var analyzeKey = String(SC.analyze || "").toUpperCase();
+    el.textContent = analyzeKey ? ("● Aktif tweet · " + analyzeKey + " taslak") : "● Aktif tweet";
     el.setAttribute("aria-hidden", "true");
     (document.body || document.documentElement).appendChild(el);
     state.focusBadgeEl = el;
@@ -350,9 +443,13 @@
     var rb = D.getReplyButton ? D.getReplyButton(article) : null;
     if (rb) { try { rb.click(); } catch (_) {} }
 
+    var t = showToast("Yanıt kutusu açılıyor…", { duration: 0 });
     waitForReplyComposer(5000).then(function (el) {
-      if (!el) { try { console.warn("[xverim] reply composer not found"); } catch (_) {} return; }
-      insertDraft(text, el, { requireComposePost: true });
+      if (!el) { copyFallback(t, text, "Yanıt kutusu açılmadı"); return; }
+      insertDraft(text, el, { requireComposePost: true }).then(function (ok) {
+        if (ok) t.update("Taslak hazır — göndermeye sen karar ver.", { kind: "ok" });
+        else copyFallback(t, text, "Taslak kutuya eklenemedi");
+      });
     });
   }
 
@@ -455,11 +552,16 @@
   }
 
   function moveFocus(delta) {
-    var list = findAllArticles();
+    var list = findFocusableArticles();
     if (!list.length) return;
     var cur = state.focusedTweet;
     var idx = cur ? list.indexOf(cur) : -1;
-    if (idx < 0) idx = delta > 0 ? -1 : list.length;
+    if (idx < 0) {
+      // The active tweet was filtered out or unmounted — restart from whatever
+      // is on the reading line now instead of jumping to the top of the list.
+      var near = pickFocused(list, null);
+      idx = near ? list.indexOf(near) : (delta > 0 ? -1 : list.length);
+    }
     var next = Math.max(0, Math.min(list.length - 1, idx + delta));
     state.articles = list;
     if (state.focusedTweet) state.focusedTweet.classList.remove("xverim-focused");
@@ -475,60 +577,80 @@
   }
 
   function logGuardrail(kind) {
-    try { chrome.runtime.sendMessage({ type: "GUARDRAIL_LOG", kind: kind }); } catch (_) {}
+    try {
+      chrome.runtime.sendMessage({ type: "GUARDRAIL_LOG", kind: kind }, function () {
+        void chrome.runtime.lastError;
+        // Keep the open panel's meters honest as you act, not only on reopen.
+        if (state.panelEl && state.panelEl.classList.contains("xverim-open")) refreshPanelData();
+      });
+    } catch (_) {}
   }
 
   function handleShortcut(action, focused) {
+    if (NEEDS_TWEET[action] && !focused) {
+      var navKeys = [SC.focusNext, SC.focusPrev].filter(Boolean).join(" / ").toUpperCase();
+      showToast("Önce bir tweet seç" + (navKeys ? (" — " + navKeys + " ile gezinebilirsin.") : "."), { kind: "warn" });
+      return;
+    }
     switch (action) {
       case "focusNext": return moveFocus(1);
       case "focusPrev": return moveFocus(-1);
       case "like": {
-        if (!focused) return;
         var btn = D.getLikeButton(focused);
-        if (btn) {
-          // getLikeButton also returns the "unlike" button; only count real likes.
-          var isLike = btn.getAttribute("data-testid") === "like";
-          btn.click();
-          if (isLike) logGuardrail("like");
-        }
+        if (!btn) { showToast("Beğen düğmesi bulunamadı.", { kind: "warn" }); return; }
+        // getLikeButton also returns the "unlike" button; only count real likes.
+        var isLike = btn.getAttribute("data-testid") === "like";
+        btn.click();
+        if (isLike) logGuardrail("like");
         return;
       }
       case "followAuthor": {
-        if (!focused) return;
         var fb = D.getFollowButton(focused);
-        if (fb) { fb.click(); logGuardrail("follow"); }
+        if (!fb) { showToast("Takip düğmesi yok — bu hesabı zaten takip ediyor olabilirsin.", { kind: "warn" }); return; }
+        fb.click();
+        logGuardrail("follow");
+        var handle = D.getAuthorHandle(focused);
+        showToast(handle ? ("@" + handle + " takip edildi.") : "Takip edildi.", { kind: "ok", duration: 1800 });
         return;
       }
       case "bookmark": {
-        if (!focused) return;
         var bb = D.getBookmarkButton(focused);
-        if (bb) bb.click();
+        if (!bb) { showToast("Yer işareti düğmesi bulunamadı.", { kind: "warn" }); return; }
+        bb.click();
         return;
       }
       case "replyWithDraft": {
-        if (!focused) return;
         var rb = D.getReplyButton(focused);
         if (rb) rb.click();
         var tweet = {
           text: D.getTweetText(focused),
           authorHandle: D.getAuthorHandle(focused)
         };
+        var t = showToast("Taslak yazılıyor…", { duration: 0 });
         waitForReplyComposer(5000).then(function (composer) {
-          if (!composer) { try { console.warn("[xverim] reply composer not found"); } catch (_) {} return; }
+          if (!composer) { t.update("Yanıt kutusu açılmadı.", { kind: "error" }); return; }
           try {
             chrome.runtime.sendMessage({ type: "AI_DRAFT", payload: tweet }, function (resp) {
               var err = chrome.runtime.lastError;
+              var reason = (err && err.message) || (resp && resp.error);
               // Keep the exact reply composer captured above. It is never
               // replaced by the timeline's persistent "new post" editor.
-              if (!err && resp && resp.ok && composer.isConnected) insertDraft(resp.data, composer, { requireComposePost: true });
-              else try { console.warn("[xverim] AI_DRAFT failed:", (err && err.message) || (resp && resp.error)); } catch (_) {}
+              if (!err && resp && resp.ok && resp.data && composer.isConnected) {
+                insertDraft(resp.data, composer, { requireComposePost: true }).then(function (ok) {
+                  if (ok) t.update("Taslak hazır — göndermeye sen karar ver.", { kind: "ok" });
+                  else copyFallback(t, resp.data, "Taslak kutuya eklenemedi");
+                });
+              } else {
+                t.update("Taslak alınamadı: " + (reason || "bilinmeyen hata"), { kind: "error", duration: 4200 });
+              }
             });
-          } catch (_) {}
+          } catch (e) {
+            t.update("Taslak alınamadı: " + String((e && e.message) || e), { kind: "error", duration: 4200 });
+          }
         });
         return;
       }
       case "analyze": {
-        if (!focused) return;
         runAnalyze(focused);
         return;
       }
@@ -536,19 +658,46 @@
     }
   }
 
+  // When text can't reach the composer, the draft still shouldn't be lost:
+  // put it on the clipboard and say so.
+  function copyFallback(toast, text, why) {
+    copyToClipboard(text).then(function (ok) {
+      toast.update(
+        ok ? (why + " — panoya kopyalandı, elle yapıştırabilirsin.") : (why + "."),
+        { kind: ok ? "warn" : "error", duration: 4200 }
+      );
+    });
+  }
+
+  // Built once: config can't change without a reload anyway.
+  var SHORTCUT_MAP = (function () {
+    var map = {};
+    for (var i = 0; i < ACTION_ORDER.length; i++) {
+      var a = ACTION_ORDER[i];
+      var v = String(SC[a] || "").toLowerCase();
+      if (v) map[v] = a;
+    }
+    return map;
+  })();
+
   function onKeyDown(e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (isTypingTarget(e.target) || isTyping(document.activeElement)) return;
     var k = (e.key || "").toLowerCase();
     if (!k) return;
-    var actions = ["like","followAuthor","replyWithDraft","analyze","bookmark","focusNext","focusPrev","togglePanel"];
-    var map = {};
-    for (var i = 0; i < actions.length; i++) {
-      var a = actions[i];
-      var v = (SC[a] || "").toLowerCase();
-      if (v) map[v] = a;
+    // While the drafts card is open, 1…9 drops that draft into the reply box —
+    // the whole flow (a, then 2) stays on the home row.
+    if (state.popoverEl && state.popoverEl.isConnected && /^[1-9]$/.test(k)) {
+      var buttons = state.popoverEl.querySelectorAll(".xverim-reply-btn");
+      var pick = buttons[parseInt(k, 10) - 1];
+      if (pick) {
+        e.preventDefault();
+        e.stopPropagation();
+        pick.click();
+        return;
+      }
     }
-    var action = map[k];
+    var action = SHORTCUT_MAP[k];
     if (!action) return;
     e.preventDefault();
     e.stopPropagation();
@@ -560,8 +709,14 @@
     if (!state.panelEl) return;
     var p = state.panelPos;
     if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
-      state.panelEl.style.left = p.x + "px";
-      state.panelEl.style.top = p.y + "px";
+      // A position saved on a wider window (or a since-resized one) could put
+      // the panel entirely off-screen, with no way to drag it back.
+      var w = state.panelEl.offsetWidth || 320;
+      var h = state.panelEl.offsetHeight || 120;
+      var x = Math.max(0, Math.min(window.innerWidth - Math.min(w, 120), p.x));
+      var y = Math.max(0, Math.min(window.innerHeight - Math.min(h, 60), p.y));
+      state.panelEl.style.left = x + "px";
+      state.panelEl.style.top = y + "px";
       state.panelEl.style.right = "auto";
     } else {
       state.panelEl.style.right = "24px";
@@ -583,17 +738,45 @@
     } catch (_) {}
   }
 
+  // One "key → what it does" row per configured shortcut, straight from the
+  // live config, so a custom key never disagrees with the cheat sheet.
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function shortcutRowsHtml() {
+    var rows = "";
+    for (var i = 0; i < ACTION_ORDER.length; i++) {
+      var action = ACTION_ORDER[i];
+      var key = String(SC[action] || "");
+      if (!key) continue;
+      // The key comes from config.js — escaped, because this is innerHTML.
+      rows += '<div class="xverim-key-row">'
+            +   '<kbd class="xverim-kbd">' + escapeHtml(key.toUpperCase()) + '</kbd>'
+            +   '<span>' + ACTION_LABELS[action] + '</span>'
+            + '</div>';
+    }
+    rows += '<div class="xverim-key-row">'
+          +   '<kbd class="xverim-kbd">1…5</kbd>'
+          +   '<span>Açık karttaki taslağı yanıt kutusuna koy</span>'
+          + '</div>'
+          + '<div class="xverim-key-row">'
+          +   '<kbd class="xverim-kbd">Esc</kbd>'
+          +   '<span>Kartı / paneli kapat</span>'
+          + '</div>';
+    return rows;
+  }
+
   function buildPanel() {
     var root = document.createElement("div");
     // Built hidden; togglePanel() decides visibility (building it pre-opened
     // made the first keypress toggle it straight back off).
     root.className = "xverim-panel";
     root.setAttribute("role", "dialog");
-    root.setAttribute("aria-label", "X Verim panel");
+    root.setAttribute("aria-label", "X Verim paneli");
     root.innerHTML = ''
       + '<div class="xverim-panel-header">'
       +   '<span class="xverim-panel-title">X Verim</span>'
-      +   '<button class="xverim-icon-btn" data-act="close" aria-label="Close panel">'
+      +   '<button class="xverim-icon-btn" data-act="close" aria-label="Paneli kapat" title="Kapat">'
       +     '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">'
       +       '<path d="M3.5 3.5 L12.5 12.5 M12.5 3.5 L3.5 12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>'
       +     '</svg>'
@@ -602,13 +785,24 @@
       + '<div class="xverim-panel-section">'
       +   '<label class="xverim-toggle">'
       +     '<input type="checkbox" data-bind="filter-enabled" />'
-      +     '<span>Niche filter</span>'
+      +     '<span>Niş filtresi</span>'
       +   '</label>'
       + '</div>'
-      + '<div class="xverim-panel-section xverim-counters">'
-      +   '<span class="xverim-counter"><b data-bind="likes">0</b> likes / hr</span>'
-      +   '<span class="xverim-counter"><b data-bind="follows">0</b> follows / hr</span>'
-      + '</div>';
+      + '<div class="xverim-panel-section">'
+      +   '<div class="xverim-panel-label">Son 60 dakika</div>'
+      +   '<div class="xverim-meter-row">'
+      +     '<div class="xverim-meter-head"><span>Beğeni</span><span><b data-bind="likes">0</b><span data-bind="likes-limit"></span></span></div>'
+      +     '<div class="xverim-meter"><i data-bind="likes-bar"></i></div>'
+      +   '</div>'
+      +   '<div class="xverim-meter-row">'
+      +     '<div class="xverim-meter-head"><span>Takip</span><span><b data-bind="follows">0</b><span data-bind="follows-limit"></span></span></div>'
+      +     '<div class="xverim-meter"><i data-bind="follows-bar"></i></div>'
+      +   '</div>'
+      + '</div>'
+      + '<details class="xverim-panel-section xverim-keys">'
+      +   '<summary>Kısayollar</summary>'
+      +   '<div class="xverim-key-list">' + shortcutRowsHtml() + '</div>'
+      + '</details>';
 
     // Drag from the header.
     var header = root.querySelector(".xverim-panel-header");
@@ -651,15 +845,27 @@
 
   // Persona is deliberately not surfaced anywhere in the UI — it only ever
   // travels from config.js into the system prompt.
+  function paintMeter(kind, value, limit) {
+    var panel = state.panelEl;
+    if (!panel) return;
+    var num = panel.querySelector("[data-bind='" + kind + "']");
+    var suffix = panel.querySelector("[data-bind='" + kind + "-limit']");
+    var bar = panel.querySelector("[data-bind='" + kind + "-bar']");
+    if (num) num.textContent = String(value);
+    if (suffix) suffix.textContent = limit ? (" / " + limit) : "";
+    if (!bar) return;
+    var ratio = limit > 0 ? Math.min(1, value / limit) : 0;
+    bar.style.width = Math.round(ratio * 100) + "%";
+    bar.className = ratio >= 1 ? "xverim-over" : (ratio >= 0.75 ? "xverim-near" : "");
+  }
   function refreshPanelData() {
     if (!state.panelEl) return;
+    var limits = C.GUARDRAILS || {};
     try {
       chrome.runtime.sendMessage({ type: "GET_COUNTS" }, function (resp) {
         if (chrome.runtime.lastError || !resp || !resp.ok || !state.panelEl) return;
-        var l = state.panelEl.querySelector("[data-bind='likes']");
-        var f = state.panelEl.querySelector("[data-bind='follows']");
-        if (l) l.textContent = String(resp.data.likes || 0);
-        if (f) f.textContent = String(resp.data.follows || 0);
+        paintMeter("likes", resp.data.likes || 0, Number(limits.warnLikesPerHour) || 0);
+        paintMeter("follows", resp.data.follows || 0, Number(limits.warnFollowsPerHour) || 0);
       });
     } catch (_) {}
   }
@@ -743,26 +949,39 @@
     }
     state.popoverEl = null;
     state.popoverArticle = null;
+    state.popoverDrafts = [];
   }
 
   // Kick off (or re-run) the AI pass for a tweet and drive the popover through
-  // its loading / error / result states. The regenerate button reuses this.
-  function runAnalyze(article) {
+  // its loading / error / result states. The regenerate button reuses this and
+  // passes what's already on screen, so ↻ means "different ones", not "again".
+  function runAnalyze(article, options) {
     if (!article) return;
+    var regenerate = !!(options && options.regenerate);
+    if (!regenerate) state.popoverDrafts = [];
     var payload = {
       text: D.getTweetText(article),
       authorHandle: D.getAuthorHandle(article),
-      counts: D.getCountsFromGroup(article)
+      counts: D.getCountsFromGroup(article),
+      previous: state.popoverDrafts.slice(0)
     };
     showAnalyzePopover(article, { status: "loading" });
     try {
       chrome.runtime.sendMessage({ type: "AI_ANALYZE", payload: payload }, function (resp) {
         var err = chrome.runtime.lastError;
-        if (!err && resp && resp.ok) showAnalyzePopover(article, resp.data || {});
-        else showAnalyzePopover(article, {
-          status: "error",
-          message: String((err && err.message) || (resp && resp.error) || "unknown")
-        });
+        if (!err && resp && resp.ok) {
+          var data = resp.data || {};
+          var seen = (data.replies || []).map(function (r) {
+            return (r && typeof r === "object") ? String(r.text || "") : String(r || "");
+          }).filter(Boolean);
+          state.popoverDrafts = state.popoverDrafts.concat(seen).slice(-8);
+          showAnalyzePopover(article, data);
+        } else {
+          showAnalyzePopover(article, {
+            status: "error",
+            message: String((err && err.message) || (resp && resp.error) || "bilinmeyen hata")
+          });
+        }
       });
     } catch (e) {
       showAnalyzePopover(article, { status: "error", message: String((e && e.message) || e) });
@@ -792,20 +1011,56 @@
     return sk;
   }
 
+  // The source tweet, one line, above the drafts. With several cards open in a
+  // session it stops being obvious which tweet you are answering.
+  function buildTweetContext(article) {
+    var wrap = document.createElement("div");
+    wrap.className = "xverim-popover-source";
+    var handle = D.getAuthorHandle(article);
+    if (handle) {
+      var h = document.createElement("span");
+      h.className = "xverim-popover-source-handle";
+      h.textContent = "@" + handle;
+      wrap.appendChild(h);
+    }
+    var text = (D.getTweetText(article) || "").replace(/\s+/g, " ").trim();
+    var t = document.createElement("span");
+    t.className = "xverim-popover-source-text";
+    t.textContent = text.length > 130 ? (text.slice(0, 130) + "…") : (text || "(metin yok)");
+    wrap.appendChild(t);
+    return wrap;
+  }
+
   // One reply draft as a self-contained card: the draft (in the tweet's
-  // language), its translation underneath, a live char count, and the primary
-  // "Yanıtla" (insert into composer) + secondary copy action. Only the draft
-  // text is ever posted or copied — the translation is just to read.
-  function buildReplyCard(article, reply) {
+  // language) in an editable field, its translation underneath, a live char
+  // count, and the primary "Yanıtla" (insert into composer) + secondary copy
+  // action. Only the draft text is ever posted or copied — the translation is
+  // just to read. Editing here beats copying it out, fixing it, pasting back.
+  function buildReplyCard(article, reply, index) {
     var text = (reply && reply.text) || "";
     var translation = (reply && reply.translation ? String(reply.translation) : "").trim();
 
     var li = document.createElement("li");
 
-    var span = document.createElement("span");
-    span.className = "xverim-popover-angle-text";
-    span.textContent = text;
-    li.appendChild(span);
+    var top = document.createElement("div");
+    top.className = "xverim-draft-top";
+
+    var badge = document.createElement("span");
+    badge.className = "xverim-draft-index";
+    badge.textContent = String(index + 1);
+    badge.setAttribute("aria-hidden", "true");
+    badge.title = (index + 1) + " tuşu bu taslağı yanıt kutusuna koyar";
+
+    var body = document.createElement("textarea");
+    body.className = "xverim-draft-text";
+    body.value = text;
+    body.rows = 1;              // autoGrow sets the real height
+    body.spellcheck = false;
+    body.setAttribute("aria-label", "Yanıt taslağı (düzenlenebilir)");
+
+    top.appendChild(badge);
+    top.appendChild(body);
+    li.appendChild(top);
 
     if (translation && translation !== text) {
       var tr = document.createElement("span");
@@ -819,10 +1074,19 @@
 
     var count = document.createElement("span");
     count.className = "xverim-char-count";
-    var len = text.length;
-    count.textContent = len;
-    if (len > 280) count.classList.add("xverim-char-over");
-    else if (len > 240) count.classList.add("xverim-char-warn");
+
+    function currentText() { return body.value.trim(); }
+    function autoGrow() {
+      body.style.height = "auto";
+      body.style.height = body.scrollHeight + "px";
+    }
+    function refreshCount() {
+      var len = body.value.length;
+      count.textContent = len;
+      count.classList.toggle("xverim-char-warn", len > 240 && len <= 280);
+      count.classList.toggle("xverim-char-over", len > 280);
+    }
+    body.addEventListener("input", function () { refreshCount(); autoGrow(); });
 
     var group = document.createElement("span");
     group.className = "xverim-popover-btn-group";
@@ -836,8 +1100,21 @@
     replyBtn.addEventListener("click", function (e) {
       e.preventDefault();
       e.stopPropagation();
+      var out = currentText();
+      if (!out) { showToast("Taslak boş.", { kind: "warn" }); return; }
       closePopover();
-      replyWithText(article, text);
+      replyWithText(article, out);
+    });
+
+    // Escape steps out of the field first (so the card survives a stray Esc);
+    // Cmd/Ctrl+Enter sends the edited draft on to the composer.
+    body.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { e.stopPropagation(); body.blur(); return; }
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        replyBtn.click();
+      }
     });
 
     // Secondary: copy, for when you'd rather paste it elsewhere.
@@ -847,13 +1124,17 @@
     copyBtn.setAttribute("aria-label", "Kopyala");
     copyBtn.title = "Kopyala";
     copyBtn.innerHTML = COPY_ICON;
-    bindCopyButton(copyBtn, function () { return text; });
+    bindCopyButton(copyBtn, currentText);
 
     group.appendChild(replyBtn);
     group.appendChild(copyBtn);
     actions.appendChild(count);
     actions.appendChild(group);
     li.appendChild(actions);
+
+    refreshCount();
+    // scrollHeight is 0 until the element is in the document.
+    window.requestAnimationFrame(autoGrow);
     return li;
   }
 
@@ -883,6 +1164,7 @@
       errEl.className = "xverim-popover-status xverim-popover-error";
       errEl.textContent = "Bir sorun oldu: " + (data.message || "bilinmeyen hata");
       content.appendChild(errEl);
+      content.appendChild(buildRetryButton(article));
       return content;
     }
 
@@ -896,16 +1178,34 @@
     if (!replies.length) {
       var none = document.createElement("div");
       none.className = "xverim-popover-empty";
-      none.textContent = "Taslak üretilemedi — ↻ ile tekrar deneyin.";
+      none.textContent = "Bu tweet için taslak çıkmadı.";
       rSection.appendChild(none);
+      rSection.appendChild(buildRetryButton(article));
     } else {
       var ul = document.createElement("ul");
       ul.className = "xverim-popover-list";
-      replies.forEach(function (reply) { ul.appendChild(buildReplyCard(article, reply)); });
+      replies.forEach(function (reply, i) { ul.appendChild(buildReplyCard(article, reply, i)); });
       rSection.appendChild(ul);
+      var hint = document.createElement("div");
+      hint.className = "xverim-popover-hint";
+      hint.textContent = "Taslakları düzenleyebilirsin · 1-" + replies.length + " tuşları yanıt kutusuna koyar";
+      rSection.appendChild(hint);
     }
     content.appendChild(rSection);
     return content;
+  }
+
+  function buildRetryButton(article) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "xverim-ghost-btn";
+    btn.textContent = "Tekrar dene";
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      runAnalyze(article);
+    });
+    return btn;
   }
 
   // Anchor the card to the right of the tweet, flipping / clamping to stay in
@@ -961,10 +1261,11 @@
     header.querySelector("[data-act='regen']").addEventListener("click", function (e) {
       e.preventDefault();
       e.stopPropagation();
-      runAnalyze(article);
+      runAnalyze(article, { regenerate: true });
     });
 
     pop.appendChild(header);
+    pop.appendChild(buildTweetContext(article));
     pop.appendChild(buildPopoverContent(article, data));
 
     (document.body || document.documentElement).appendChild(pop);
@@ -972,12 +1273,16 @@
     state.popoverArticle = article;
     repositionPopover(pop, article);
   }
-  // Click outside / Esc dismisses the popover.
+  // Click outside / Esc dismisses the popover, then the panel. X's own dialogs
+  // keep Escape to themselves — we never preventDefault, and we don't steal the
+  // keypress that was meant to close a reply modal.
   document.addEventListener("mousedown", function (e) {
     if (state.popoverEl && !state.popoverEl.contains(e.target)) closePopover();
   }, true);
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") { closePopover(); }
+    if (e.key !== "Escape") return;
+    if (state.popoverEl) { closePopover(); return; }
+    if (state.panelEl && state.panelEl.classList.contains("xverim-open") && !xDialogOpen()) togglePanel(false);
   });
 
   // ============== Guardrail banner ==============
@@ -992,16 +1297,16 @@
     var el = document.createElement("div");
     el.className = "xverim-banner";
     el.setAttribute("role", "status");
-    var label = (kind === "like") ? "likes" : (kind === "follow") ? "follows" : "actions";
+    var label = (kind === "like") ? "beğeni" : (kind === "follow") ? "takip" : "işlem";
     el.innerHTML = ''
       + '<span class="xverim-banner-text">'
       +   '<svg class="xverim-banner-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">'
       +     '<path d="M8 1.5 L15 14 L1 14 Z" fill="currentColor"/>'
       +     '<text x="8" y="12" text-anchor="middle" font-size="9" font-weight="700" fill="#1d9bf0">!</text>'
       +   '</svg>'
-      +   'Pace check: ' + label + ' &gt; ' + (limit == null ? "?" : limit) + '/hr. Slow down — this is your account.'
+      +   'Hız kontrolü: son bir saatte ' + (limit == null ? "?" : limit) + ' ' + label + ' sınırını aştın. Biraz yavaşla — bu senin hesabın.'
       + '</span>'
-      + '<button class="xverim-banner-close" aria-label="Dismiss">'
+      + '<button class="xverim-banner-close" aria-label="Kapat">'
       +   '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">'
       +     '<path d="M3.5 3.5 L12.5 12.5 M12.5 3.5 L3.5 12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>'
       +   '</svg>'
@@ -1040,6 +1345,12 @@
     startFilterObserver();
     document.addEventListener("keydown", onKeyDown, true);
     loadPanelPos();
+    // A resize moves the tweet the card is anchored to, and can strand a panel
+    // that was dragged to what used to be the right edge.
+    window.addEventListener("resize", function () {
+      if (state.popoverEl && state.popoverArticle) repositionPopover(state.popoverEl, state.popoverArticle);
+      if (state.panelEl) applyPanelPos();
+    });
     // Sync filter toggle from storage (popup can change it cross-tab).
     try {
       chrome.storage.local.get(["xverim_filter_enabled"], function (d) {

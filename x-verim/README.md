@@ -17,15 +17,22 @@ A personal-use Chrome extension (Manifest V3, load-unpacked) that speeds up a si
 
 ## Install (Chrome)
 
-1. Edit `config.js` and fill in:
+1. Copy `config.example.js` to `config.js` and fill in:
    - `DEEPSEEK_API_KEY`
-   - `PERSONA.identity` / `niche` / `tone`
+   - `PERSONA.identity` / `niche` / `tone`, and — the biggest quality lever —
+     `PERSONA.samples`, a handful of tweets you actually wrote. The model copies
+     their rhythm, never their content.
    - Optional: `FILTER.keywordsInclude` / `keywordsExclude` / `mutedAuthors` / `highlightMinLikes`
+   - Optional: `AI_TIMEOUT_MS` (default 45 s) so a stalled request gives up instead of hanging.
 2. Open `chrome://extensions`, turn on **Developer mode** (top right).
 3. Click **Load unpacked** and select the `x-verim/` folder.
 4. Open `https://x.com` and the panel hotkey is `v`.
 
-`config.js` is in `.gitignore` — your key never leaves the machine.
+`config.js` is in `.gitignore` — your key never leaves the machine. Without it
+the extension will not load at all, which is why the example file is committed.
+
+Any action missing from `SHORTCUTS` falls back to the default key in the table
+below; setting one to `""` still disables it.
 
 ## Install (Safari, macOS)
 
@@ -111,35 +118,90 @@ guards it — under Safari `config.js` is already loaded by the `scripts` array.
 | `s` | Bookmark |
 | `f` | Follow the author (if not already following) |
 | `r` | Open reply composer and insert an AI draft |
-| `a` | Show AI popover: ready reply drafts (each with a Turkish translation) you can drop straight into the composer |
+| `a` | Show the drafts card: ready reply drafts (each with a Turkish translation) you can drop straight into the composer |
 | `v` | Toggle the floating panel |
+| `1`…`5` | While the drafts card is open: put that draft into the reply box |
+| `Esc` | Close the drafts card, then the panel |
 
-Shortcuts are ignored while you're typing in an `input`, `textarea`, or any `contenteditable` region.
+Shortcuts are ignored while you're typing in an `input`, `textarea`, or any
+`contenteditable` region — including the editable draft fields in the card.
+
+The focused tweet carries a badge that names the analyse key, so the one thing
+worth pressing is always on screen.
+
+### Drafts card (`a`)
+
+- The source tweet's handle and first line sit above the drafts — with several
+  cards opened in a session, it stops being obvious which tweet you're answering.
+- Each draft is **editable in place**, with a live character count (yellow past
+  240, red past 280). `Yanıtla`, `Kopyala` and the number keys all use whatever
+  is in the field at that moment.
+- `Cmd`/`Ctrl` + `Enter` inside a draft sends it to the reply box. `Esc` steps
+  out of the field first, so a stray Esc never throws away an edit.
+- ↻ regenerates. It sends the drafts already on screen back to the model as
+  "don't repeat these", so a re-run means *different angles*, not a reword.
+- Errors and empty results get a `Tekrar dene` button instead of a dead card.
 
 ### Floating panel (toggle with `v`)
 
 - Filter on / off (live — syncs with the popup)
-- Hourly counters: likes / follows (60-min rolling)
+- 60-min rolling pace meters for likes and follows, each against its
+  `GUARDRAILS` limit (yellow at 75%, red at the limit)
+- A collapsible shortcut cheat sheet, generated from the live `SHORTCUTS` — a
+  custom key can never disagree with what it shows
 
-Drag the header to reposition. Position is persisted in `chrome.storage.local`.
+Drag the header to reposition. Position is persisted in `chrome.storage.local`,
+and clamped back into view if the window is later resized smaller.
 
 ### Popup (toolbar icon)
 
-- **Niche filter on** — reflects content-script state, syncs both ways
-- **Post ideas** — topic (optional), how many, and an *angle* (mixed / opinion /
-  lesson / question / story / observation). Each result is an **editable** card with
-  a live character count against X's 280 limit, plus `Copy` and `Open in composer`.
-  Topic, count and angle persist between openings; Enter in the topic field generates.
-- **Hourly counters**
+- **Niş filtresi** — reflects content-script state, syncs both ways
+- **Gönderi fikirleri** — topic (optional), how many, and an *angle* (karışık /
+  görüş / ders / soru / an / gözlem). Each result is an **editable** card with a
+  live character count against X's 280 limit, plus `Kopyala` and `Kutuya koy`.
+  Topic, count and angle persist between openings; Enter in the topic field or
+  `Cmd`/`Ctrl` + `Enter` anywhere generates, and a re-run asks for ideas that
+  differ from the ones already listed.
+- **Pace meters** for the last 60 minutes, with the limits fetched from the
+  background (the popup never loads `config.js`).
+- Failures report into a status line at the bottom. The popup raises no
+  `alert()` dialogs.
 
 Reply drafting is not in the popup — it lives on the timeline, where the tweet
-already is: focus one and press `a` (analysis + three ready-to-post drafts) or `r`
+already is: focus one and press `a` (three ready-to-post drafts) or `r`
 (draft straight into the reply box).
+
+### Feedback
+
+Anything that used to fail into the console now shows a small toast in the
+bottom-right corner: a draft on its way to the composer, an API error, a key
+pressed with no tweet focused. If a draft can't reach the composer it is copied
+to the clipboard instead, and the toast says so — a generated draft is never
+silently lost.
 
 The persona is **never displayed** in any surface. It travels from `config.js` into
 the system prompt and nowhere else; the background exposes no message that returns it.
 
-`Open in composer` clicks the side **New Tweet** button on the current x.com tab, waits for the composer to mount, and inserts the text. You still press the Post button yourself.
+`Kutuya koy` clicks the side **New Tweet** button on the current x.com tab, waits for the composer to mount, and inserts the text. You still press the Post button yourself.
+
+## How the drafts get their voice
+
+`buildSystemPrompt()` in `background.js` is the only place a draft's voice is
+decided, and it has two modes: `compose` (your niches *are* the subject) and
+`respond` (the source tweet is the subject, the niches only colour the voice).
+
+The voice rules are written as concrete bans rather than adjectives, because
+"be natural" changes nothing while "no em dashes" does. The shared list
+(`HUMAN_VOICE`) rules out the constructions that identify a text as machine-written
+on sight — `not X, but Y`, three-item lists, "here's the thing", a rhetorical
+question as an opener — plus the usual buzzword set, and it asks for varied
+lengths so a batch of three doesn't arrive as three identical sentences.
+
+On top of that, `respond` mode is told to react rather than summarise: no
+repeating the tweet back, no compliment openers, match the tweet's register and
+length, and a four-word reply is a real reply. `PERSONA.samples` from `config.js`
+are pasted in as style anchors — that is the single strongest lever on how much
+the output sounds like you.
 
 ## Why the JS files start with a BOM
 
@@ -162,6 +224,7 @@ The DOM helper functions in the same file (`getTweetArticle`, `getTweetText`, `g
 ```
 x-verim/
 ├── manifest.json           MV3 manifest (storage perm only)
+├── config.example.js       Template — copy to config.js
 ├── config.js               Personal config — NOT committed
 ├── background.js           DeepSeek + guardrail counters (SW on Chrome, event page on Safari)
 ├── lib/x-dom.js            SELECTORS + DOM helpers
