@@ -126,8 +126,29 @@ guards it — under Safari `config.js` is already loaded by the `scripts` array.
 Shortcuts are ignored while you're typing in an `input`, `textarea`, or any
 `contenteditable` region — including the editable draft fields in the card.
 
-The focused tweet carries a badge that names the analyse key, so the one thing
-worth pressing is always on screen.
+### The active tweet
+
+Every one-key action applies to exactly one tweet, so which one that is has to
+be obvious and never surprising:
+
+- **Scrolling** picks the tweet crossing a reading line at 35% of the viewport
+  height, with hysteresis around it so two neighbours can't flip-flop.
+- **`j` / `k` and clicking** are deliberate picks: they stay put while any real
+  part of that tweet is still on screen, and hand control back to the reading
+  line the moment you scroll — wheel, trackpad, or `Space` / `PageDown` /
+  arrows. `j` / `k` land the tweet straddling the same line they're measured
+  against, so a jump can never lose the highlight as the scroll settles.
+- The ring and its badge are drawn by a **floating overlay**, not by styles
+  inside X's own markup: it can't be faded by the niche filter, can't be
+  clipped by the row, and can't fight X's hover backgrounds. It's cut where X's
+  sticky header crosses it — and that header's height is measured, not assumed,
+  because the home timeline's tab bar makes it taller than other views.
+- The badge names the analyse key, so the one thing worth pressing is always on
+  screen. It's hidden entirely while a reply or compose dialog is open, and the
+  tweet X copies into that dialog is never focusable.
+
+`window.__xverim.applyFocus()` steps the pass by hand in the inspector, and
+`window.__xverim.articles()` returns the rows it considers.
 
 ### Drafts card (`a`)
 

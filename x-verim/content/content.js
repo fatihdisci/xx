@@ -19,7 +19,13 @@
   var D = window.XVerimDom || {};
   var SC = C.SHORTCUTS || {};
   var FILTER = C.FILTER || { enabled: true };
-  var REDUCED_MOTION = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  // Read live, not once: someone who turns motion down mid-session shouldn't
+  // have to reload the tab to get instant jumps instead of smooth ones.
+  var MOTION_QUERY = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+  var REDUCED_MOTION = !!(MOTION_QUERY && MOTION_QUERY.matches);
+  if (MOTION_QUERY && MOTION_QUERY.addEventListener) {
+    MOTION_QUERY.addEventListener("change", function (e) { REDUCED_MOTION = !!e.matches; });
+  }
 
   // config.js stays authoritative. These only fill in actions it never mentions,
   // so a key deliberately set to "" is still disabled — and a config written
@@ -58,11 +64,19 @@
     panelPos: null,
     popoverEl: null,
     popoverArticle: null,
+    // The active-tweet overlay: one floating wrapper holding the ring and its
+    // label, so both are placed from a single measurement per frame.
+    ringEl: null,
+    ringBoxEl: null,
     focusBadgeEl: null,
-    // After j/k jumps we lock the auto-pick briefly so the highlight lands on
-    // the chosen tweet instead of flickering to whatever the smooth-scroll
-    // passes over on the way there.
-    focusLockUntil: 0,
+    ringVisible: false,
+    ringEnter: false,
+    // A j/k jump or a click is a deliberate pick: it stays put while you can
+    // still see the tweet, instead of the reading line re-picking under you.
+    explicitFocus: false,
+    // Holds that pick through a smooth scroll, while the target is still
+    // off-screen and the reading line would grab whatever we pass over.
+    focusLock: null,
     // Drafts currently on screen, fed back to the model on ↻ so a re-run
     // produces new angles instead of the same three sentences reworded.
     popoverDrafts: [],
@@ -114,148 +128,354 @@
   }
 
   // ============== Focus model ==============
-  function findAllArticles() {
-    return Array.prototype.slice.call(document.querySelectorAll(D.SELECTORS.tweet));
+  var HEADER_FALLBACK = 56;      // used only when the sticky bar can't be found
+  var FOCUS_LINE_RATIO = 0.35;   // the "reading line", as a share of the viewport
+  var FOCUS_BAND_RATIO = 0.12;   // hysteresis around it
+
+  function viewportH() { return window.innerHeight || document.documentElement.clientHeight || 0; }
+
+  // X's sticky top bar is a different height per view — the home timeline adds
+  // the "For you / Following" tabs under the heading — so the line the ring has
+  // to stay clear of is measured, not assumed. A hardcoded 56 let the ring paint
+  // across the tabs whenever a tall tweet scrolled up behind them.
+  // Memoised: this only really changes on route change and resize.
+  var headerSafeCache = HEADER_FALLBACK;
+  var headerSafeAt = 0;
+  function stickyBottom(parent, depth) {
+    var out = 0;
+    if (!parent || depth < 0) return out;
+    var kids = parent.children;
+    for (var i = 0; kids && i < kids.length && i < 8; i++) {
+      var el = kids[i];
+      var cs;
+      try { cs = window.getComputedStyle(el); } catch (_) { continue; }
+      if (cs.position === "sticky" || cs.position === "fixed") {
+        var r = el.getBoundingClientRect();
+        // Only a bar currently pinned across the top counts: a sticky element
+        // further down the column, or a tall sticky sidebar, is not something
+        // the ring has to stay clear of.
+        if (r.top <= 24 && r.bottom > out && r.bottom <= 240) out = r.bottom;
+      } else if (depth > 0) {
+        out = Math.max(out, stickyBottom(el, depth - 1));
+      }
+    }
+    return out;
+  }
+  function headerSafe() {
+    var now = Date.now();
+    if (now - headerSafeAt < 500) return headerSafeCache;
+    headerSafeAt = now;
+    var col = document.querySelector(D.SELECTORS.primaryColumn);
+    var found = col ? stickyBottom(col, 2) : 0;
+    headerSafeCache = found > 0 ? Math.round(found) : HEADER_FALLBACK;
+    return headerSafeCache;
   }
 
-  // A tweet the filter removed still matches the selector, and a display:none
-  // element reports a 0×0 rect at the top of the page — which scored *better*
-  // than the tweet you were actually reading. Focus only ever considers the
-  // articles you can see.
-  function isFocusable(article) {
-    if (!article || !article.isConnected) return false;
-    if (article.classList.contains("xverim-hide")) return false;
-    var r = article.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+  function readingLine(vh) { return Math.max(headerSafe() + 32, vh * FOCUS_LINE_RATIO); }
+
+  // Rebuilt on DOM change, not on every scroll frame: X mutates the timeline
+  // constantly but not 60 times a second, and re-running querySelectorAll over
+  // the whole document per frame was the reason scrolling felt heavy.
+  //
+  // The TTLs are the safety net. Attaching the MutationObserver is allowed to
+  // fail (it's wrapped in a try), and without a fallback both caches would then
+  // be frozen for the life of the tab — the extension would silently stop
+  // seeing new tweets. Two extra queries a second is a cheap price for that.
+  var ARTICLES_TTL = 500;
+  var DIALOG_TTL = 250;
+  var articlesDirty = true;
+  var articlesAt = 0;
+  var dialogDirty = true;
+  var dialogAt = 0;
+  var dialogOpenCache = false;
+
+  function collectArticles() {
+    var out = [];
+    var root = document.querySelector(D.SELECTORS.primaryColumn) || document.body;
+    if (!root) return out;
+    var found;
+    try { found = root.querySelectorAll(D.SELECTORS.tweet); } catch (_) { return out; }
+    for (var i = 0; i < found.length; i++) {
+      // The tweet X copies into its reply / quote dialog matches the same
+      // selector but is not a row you navigate: focusing one drew the ring on
+      // top of an overlay and left a detached "active tweet" behind when the
+      // dialog closed.
+      if (found[i].closest && found[i].closest('[role="dialog"]')) continue;
+      out.push(found[i]);
+    }
+    return out;
   }
-  function findFocusableArticles() {
-    return findAllArticles().filter(isFocusable);
+  function getArticles() {
+    var now = Date.now();
+    if (articlesDirty || !state.articles || now - articlesAt > ARTICLES_TTL) {
+      state.articles = collectArticles();
+      articlesDirty = false;
+      articlesAt = now;
+      // React recycles DOM nodes, so a row can be remounted still carrying our
+      // class — which showed two tweets as active at once.
+      var marked = document.querySelectorAll(".xverim-focused");
+      for (var i = 0; i < marked.length; i++) {
+        if (marked[i] !== state.focusedTweet) marked[i].classList.remove("xverim-focused");
+      }
+    }
+    return state.articles;
   }
 
-  // The active tweet is the one crossing a "reading line" a little above the
-  // viewport's middle — that reads as the tweet you're actually looking at,
-  // and it stays right even for a tweet taller than the viewport (whose real
-  // midpoint would be off-screen). `current` adds hysteresis: while the tweet
-  // that's already active still crosses the line, we keep it, so small scrolls
-  // don't make the highlight jitter between neighbours.
-  function focusLineDist(a, vh, line) {
-    var r = a.getBoundingClientRect();
-    if (r.bottom < 0 || r.top > vh) return Infinity;        // off-screen
-    if (r.top <= line && r.bottom >= line) return 0;        // crosses the line
-    return r.top > line ? r.top - line : line - r.bottom;   // nearest edge
-  }
-  function pickFocused(articles, current) {
-    if (!articles || !articles.length) return null;
-    var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-    var line = vh * 0.38;
-    // Keep the active tweet while it still crosses the line, or stays within a
-    // small band around it. That kills the flip-flop when two neighbours sit on
-    // the boundary, and keeps j/k's pick even when a short tweet centred by the
-    // jump doesn't quite reach the line.
-    if (current && isFocusable(current) && focusLineDist(current, vh, line) <= vh * 0.12) {
-      return current;
-    }
-    var best = null, bestDist = Infinity;
-    for (var i = 0; i < articles.length; i++) {
-      if (!isFocusable(articles[i])) continue;
-      var dist = focusLineDist(articles[i], vh, line);
-      if (dist < bestDist) { bestDist = dist; best = articles[i]; }
-    }
-    return bestDist === Infinity ? null : best;
-  }
-
-  function applyFocus() {
-    // During a post-j/k lock, keep the chosen tweet; just keep the badge glued
-    // to it as the smooth scroll settles.
-    if (state.focusLockUntil && Date.now() < state.focusLockUntil) {
-      updateFocusBadge();
-      return;
-    }
-    var next = pickFocused(state.articles, state.focusedTweet);
-    if (next !== state.focusedTweet) {
-      if (state.focusedTweet) state.focusedTweet.classList.remove("xverim-focused");
-      state.focusedTweet = next;
-      if (state.focusedTweet) state.focusedTweet.classList.add("xverim-focused");
-    }
-    // Reposition every tick (not just on change) since scrolling moves the
-    // focused tweet on screen even when it stays the same element.
-    updateFocusBadge();
-  }
-
-  // A floating tag next to the focused tweet — the outline alone was easy to
-  // miss; this spells out that shortcuts (l/f/s/r/a) act on this tweet.
-  function ensureFocusBadge() {
-    if (state.focusBadgeEl) return state.focusBadgeEl;
-    var el = document.createElement("div");
-    el.className = "xverim-focus-badge";
-    // The hint is what makes the badge teach the extension instead of just
-    // marking a tweet — and it follows the configured key, not a hardcoded "a".
-    var analyzeKey = String(SC.analyze || "").toUpperCase();
-    el.textContent = analyzeKey ? ("● Aktif tweet · " + analyzeKey + " taslak") : "● Aktif tweet";
-    el.setAttribute("aria-hidden", "true");
-    (document.body || document.documentElement).appendChild(el);
-    state.focusBadgeEl = el;
-    return el;
-  }
   // A *visible* X dialog (reply / compose / media viewer) — deliberately not
   // our own panel/popover, which also carry role="dialog" and would otherwise
-  // keep the badge hidden for good once opened.
+  // keep the ring hidden for good once opened. Cached per DOM change:
+  // getClientRects forces layout, and this is read on every scroll frame.
   function xDialogOpen() {
+    var now = Date.now();
+    if (!dialogDirty && now - dialogAt <= DIALOG_TTL) return dialogOpenCache;
+    dialogDirty = false;
+    dialogAt = now;
+    dialogOpenCache = false;
     var dialogs = document.querySelectorAll('[role="dialog"]');
     for (var i = 0; i < dialogs.length; i++) {
       var d = dialogs[i];
       if (d.classList.contains("xverim-panel") || d.classList.contains("xverim-popover")) continue;
-      if (d.getClientRects && d.getClientRects().length) return true;  // rendered
+      if (d.getClientRects && d.getClientRects().length) { dialogOpenCache = true; break; }  // rendered
     }
-    return false;
+    return dialogOpenCache;
   }
-  // Roughly clears X's sticky top bar so the badge is never hidden behind it.
-  var HEADER_SAFE = 56;
-  function updateFocusBadge() {
-    var article = state.focusedTweet;
-    // Hide it entirely while a modal is open (reply / compose): the timeline is
-    // behind the overlay, and a floating badge over the dialog just looks broken.
-    if (xDialogOpen() || !article || !article.isConnected) {
-      if (state.focusBadgeEl) state.focusBadgeEl.style.display = "none";
-      return;
-    }
-    var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-    var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+
+  // One rect read per article per pass. The old pair of isFocusable() +
+  // focusLineDist() measured the same element twice, and layout reads are the
+  // expensive half of a scroll frame.
+  //
+  // null  → can't hold focus at all (unmounted, filtered out, no box)
+  // dist  → distance to the reading line; 0 when the row crosses it, Infinity
+  //         when the row is off-screen (behind the sticky header counts as off).
+  function measure(article, vh, line) {
+    if (!article || !article.isConnected) return null;
+    if (article.classList.contains("xverim-hide")) return null;
     var r = article.getBoundingClientRect();
-    if (r.bottom <= HEADER_SAFE || r.top >= vh) {
-      if (state.focusBadgeEl) state.focusBadgeEl.style.display = "none";
-      return;
+    if (r.width <= 0 || r.height <= 0) return null;
+    var safe = headerSafe();
+    var offEdge = (r.top <= line && r.bottom >= line) ? 0
+                : (r.top > line ? r.top - line : line - r.bottom);
+    return {
+      rect: r,
+      edge: offEdge,
+      dist: (r.bottom <= safe || r.top >= vh) ? Infinity : offEdge,
+      visible: Math.min(r.bottom, vh) - Math.max(r.top, safe)
+    };
+  }
+
+  // The active tweet is the one crossing a reading line above the viewport's
+  // middle — that reads as the tweet you're actually looking at, and stays
+  // right even for a tweet taller than the viewport (whose real midpoint would
+  // be off-screen). Two things keep it from flickering: a deliberate pick holds
+  // while a real part of it is still visible, and everything else gets a band
+  // of hysteresis so neighbours can't flip-flop on the boundary.
+  function pickFocused(list, current, vh, line) {
+    var m;
+    if (current) {
+      m = measure(current, vh, line);
+      if (m) {
+        if (state.explicitFocus && m.visible >= Math.min(80, m.rect.height)) return current;
+        // Scaled to the row, not just the viewport: a flat 12% of the window is
+        // wider than a short tweet, so the ring could sit a whole row away from
+        // the line it's supposed to track. A tall row still gets the full band —
+        // it fills the screen anyway, and nothing else is competing for it.
+        var band = Math.min(vh * FOCUS_BAND_RATIO, Math.max(40, m.rect.height * 0.4));
+        if (m.dist <= band) return current;
+      }
     }
-    var el = ensureFocusBadge();
-    el.style.display = "block";
-    // Sit just above the tweet, but drop just inside it (and below the header)
-    // when the top edge is scrolled off — so it stays pinned to the active card.
-    var top = r.top - 22;
-    if (top < HEADER_SAFE) top = Math.min(r.bottom - 24, Math.max(HEADER_SAFE, r.top + 6));
-    var maxLeft = Math.max(4, vw - el.offsetWidth - 8);
-    var left = Math.min(Math.max(4, r.left + 12), maxLeft);
-    el.style.top = top + "px";
-    el.style.left = left + "px";
+    var best = null, bestDist = Infinity;
+    for (var i = 0; i < list.length; i++) {
+      m = measure(list[i], vh, line);
+      if (!m || m.dist >= bestDist) continue;
+      bestDist = m.dist;
+      best = list[i];
+    }
+    return best;
+  }
+  // Where "start here" is, when nothing is active yet: nearest to the reading
+  // line whether or not it's on screen, so a gap between loaded rows lands on
+  // the closest one instead of the end of the timeline.
+  function nearestArticle(list, vh, line) {
+    var best = null, bestEdge = Infinity;
+    for (var i = 0; i < list.length; i++) {
+      var m = measure(list[i], vh, line);
+      if (!m || m.edge >= bestEdge) continue;
+      bestEdge = m.edge;
+      best = list[i];
+    }
+    return best;
+  }
+
+  function applyFocus() {
+    var vh = viewportH();
+    var line = readingLine(vh);
+    var lock = state.focusLock;
+    if (lock) {
+      var lm = lock.article.isConnected ? measure(lock.article, vh, line) : null;
+      // Released the moment the target actually reaches the line (or when the
+      // backstop expires), so the next scroll is live again instead of waiting
+      // out a fixed timer.
+      if (!lm || lm.dist === 0 || Date.now() > lock.until) state.focusLock = null;
+      else { paintFocus(); return; }
+    }
+    var next = pickFocused(getArticles(), state.focusedTweet, vh, line);
+    if (next !== state.focusedTweet) setFocus(next, null);
+    else paintFocus();   // same row, new position: scrolling moved it
+  }
+
+  // The single place that changes which tweet is active.
+  function setFocus(article, opts) {
+    var o = opts || {};
+    var prev = state.focusedTweet;
+    if (prev && prev !== article) prev.classList.remove("xverim-focused");
+    state.focusedTweet = article || null;
+    if (state.focusedTweet) state.focusedTweet.classList.add("xverim-focused");
+    if (prev !== state.focusedTweet) state.ringEnter = true;
+    // Always assigned: a passive re-pick has to drop the stickiness a previous
+    // j/k or click earned, or the new row would inherit it.
+    state.explicitFocus = !!o.explicit;
+    if (o.scroll && state.focusedTweet) {
+      scrollArticleToLine(state.focusedTweet);
+      state.focusLock = { article: state.focusedTweet, until: Date.now() + (REDUCED_MOTION ? 150 : 900) };
+    }
+    paintFocus();
+  }
+
+  // ---------- Active-tweet overlay ----------
+  // Drawn as a floating element rather than styles on X's own article: it can't
+  // be faded by the niche filter's opacity, can't be clipped or rounded by the
+  // row, and can't fight X's hover backgrounds.
+  function ensureRing() {
+    if (state.ringEl && state.ringEl.isConnected) return state.ringEl;
+    var wrap = document.createElement("div");
+    wrap.className = "xverim-focus-ring";
+    wrap.setAttribute("aria-hidden", "true");
+
+    var box = document.createElement("div");
+    box.className = "xverim-focus-ring-box";
+    wrap.appendChild(box);
+
+    var badge = document.createElement("div");
+    badge.className = "xverim-focus-badge";
+    // The hint is what makes the label teach the extension instead of just
+    // marking a tweet — and it follows the configured key, not a hardcoded "a".
+    var analyzeKey = String(SC.analyze || "").toUpperCase();
+    badge.textContent = analyzeKey ? ("● Aktif tweet · " + analyzeKey + " taslak") : "● Aktif tweet";
+    wrap.appendChild(badge);
+
+    (document.body || document.documentElement).appendChild(wrap);
+    state.ringEl = wrap;
+    state.ringBoxEl = box;
+    state.focusBadgeEl = badge;
+    state.ringVisible = false;
+    return wrap;
+  }
+  function hideRing() {
+    if (state.ringEl && state.ringVisible) {
+      state.ringEl.style.display = "none";
+      state.ringVisible = false;
+    }
+  }
+  function playRingEnter() {
+    var box = state.ringBoxEl;
+    if (!box || REDUCED_MOTION || !box.animate) return;
+    // A short settle at the new row, instead of tweening between rows: tweening
+    // would lag behind the scroll it happens during.
+    try {
+      box.animate(
+        [{ opacity: 0.2, transform: "scale(0.99)" }, { opacity: 1, transform: "scale(1)" }],
+        { duration: 150, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+      );
+    } catch (_) {}
+  }
+  function paintFocus() {
+    var article = state.focusedTweet;
+    // Hidden entirely while a modal is open (reply / compose): the timeline sits
+    // behind the overlay, and a ring floating over the dialog just looks broken.
+    if (!article || !article.isConnected || xDialogOpen()) { hideRing(); return; }
+    var vh = viewportH();
+    var r = article.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) { hideRing(); return; }
+    var safe = headerSafe();
+    if (Math.min(r.bottom, vh) - Math.max(r.top, safe) < 16) { hideRing(); return; }
+
+    var wrap = ensureRing();
+    if (!state.ringVisible) { wrap.style.display = "block"; state.ringVisible = true; }
+    // transform (not top/left) so tracking the scroll stays on the compositor.
+    wrap.style.transform = "translate3d(" + Math.round(r.left) + "px, " + Math.round(r.top) + "px, 0)";
+    wrap.style.width = Math.round(r.width) + "px";
+    wrap.style.height = Math.round(r.height) + "px";
+
+    // Cut the ring where X's sticky header and the fold cross it: our overlay
+    // sits above X's stacking context, so an uncut ring would paint over both.
+    var clipTop = Math.max(0, Math.round(safe - r.top));
+    var clipBottom = Math.max(0, Math.round(r.bottom - vh));
+    state.ringBoxEl.style.clipPath = (clipTop || clipBottom)
+      ? ("inset(" + clipTop + "px 0px " + clipBottom + "px 0px)")
+      : "";
+
+    // The label rides the row's top edge, and drops just inside the row once
+    // that edge has scrolled up under the header.
+    state.focusBadgeEl.style.top = (r.top - safe < 14 ? (clipTop + 8) : -11) + "px";
+
+    if (state.ringEnter) {
+      state.ringEnter = false;
+      playRingEnter();
+    }
   }
 
   function scheduleFocus() {
     if (state.rafId != null) return;
     state.rafId = window.requestAnimationFrame(function () {
       state.rafId = null;
-      state.articles = findAllArticles();
       applyFocus();
     });
   }
 
+  // Any real scroll gesture hands control back to the reading line. Keyed off
+  // input events, not the scroll event, because our own smooth scroll fires
+  // that too — and it must not cancel the pick it was made for.
+  var SCROLL_KEYS = { " ": 1, PageUp: 1, PageDown: 1, Home: 1, End: 1, ArrowUp: 1, ArrowDown: 1 };
+  function releaseExplicitFocus() {
+    if (!state.explicitFocus && !state.focusLock) return;
+    state.explicitFocus = false;
+    state.focusLock = null;
+    scheduleFocus();
+  }
+
   function startFocusObserver() {
-    state.articles = findAllArticles();
     applyFocus();
     window.addEventListener("scroll", scheduleFocus, { passive: true });
     window.addEventListener("resize", scheduleFocus);
-    // New tweets come and go; sweep the article list each mutation batch.
+    window.addEventListener("wheel", releaseExplicitFocus, { passive: true });
+    window.addEventListener("touchmove", releaseExplicitFocus, { passive: true });
+  }
+
+  // One observer for the whole extension: rows appearing, dialogs opening and
+  // route changes are all the same signal — "the DOM moved, re-measure".
+  var OUR_UI = ".xverim-focus-ring, .xverim-toasts, .xverim-popover, .xverim-panel, .xverim-banner";
+  function onlyOurUi(records) {
+    for (var i = 0; i < records.length; i++) {
+      var t = records[i].target;
+      if (!t || t.nodeType !== 1 || !t.closest || !t.closest(OUR_UI)) return false;
+    }
+    return true;
+  }
+  function startDomObserver() {
     try {
-      var mo = new MutationObserver(scheduleFocus);
-      mo.observe(document.body, { childList: true, subtree: true });
+      var mo = new MutationObserver(function (records) {
+        // A toast or a popover of ours must not cost a full timeline sweep.
+        if (onlyOurUi(records)) return;
+        articlesDirty = true;
+        dialogDirty = true;
+        // Filter first: it decides what's hidden, and focus must not land on a
+        // row that this same frame removes.
+        scheduleFilterSweep();
+        scheduleFocus();
+      });
+      // document.body, not the primary column: X replaces that node on route
+      // changes, and an observer bound to the old one goes quietly dead.
+      mo.observe(document.body || document.documentElement, { childList: true, subtree: true });
     } catch (_) {}
   }
 
@@ -513,18 +733,9 @@
     if (filterRaf != null) return;
     filterRaf = window.requestAnimationFrame(function () {
       filterRaf = null;
-      var arts = findAllArticles();
-      state.articles = arts;
+      var arts = getArticles();
       for (var i = 0; i < arts.length; i++) applyFilter(arts[i]);
     });
-  }
-  function startFilterObserver() {
-    var target = document.querySelector(D.SELECTORS.primaryColumn) || document.body;
-    try {
-      var mo = new MutationObserver(scheduleFilterSweep);
-      mo.observe(target, { childList: true, subtree: true });
-    } catch (_) {}
-    scheduleFilterSweep();
   }
 
   // ============== Shortcuts ==============
@@ -539,41 +750,56 @@
     return t && t.nodeType === 1 && isTyping(t);
   }
 
-  function scrollArticleIntoView(article) {
+  // Land the row straddling the same reading line pickFocused measures against.
+  // scrollIntoView({block:"center"}) put it somewhere else, so the tweet you
+  // jumped to could measure *further* from the line than its neighbour and lose
+  // the highlight the moment the scroll settled.
+  function scrollArticleToLine(article) {
     if (!article) return;
+    var vh = viewportH();
+    var line = readingLine(vh);
+    var r = article.getBoundingClientRect();
+    var desiredTop = line - Math.min(r.height, vh * 0.5) / 2;
+    var minTop = headerSafe() + 8;
+    if (desiredTop < minTop) desiredTop = minTop;
+    var top = window.scrollY + r.top - desiredTop;
+    var max = Math.max(0, (document.documentElement.scrollHeight || 0) - vh);
+    top = Math.max(0, Math.min(max, top));
     try {
-      article.scrollIntoView({
-        block: "center",
-        behavior: REDUCED_MOTION ? "auto" : "smooth"
-      });
+      window.scrollTo({ top: top, behavior: REDUCED_MOTION ? "auto" : "smooth" });
     } catch (_) {
-      try { article.scrollIntoView(); } catch (__) {}
+      try { window.scrollTo(0, top); } catch (__) {}
     }
   }
 
+  function focusableArticles(vh, line) {
+    var list = getArticles();
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      if (measure(list[i], vh, line)) out.push(list[i]);
+    }
+    return out;
+  }
+
   function moveFocus(delta) {
-    var list = findFocusableArticles();
-    if (!list.length) return;
-    var cur = state.focusedTweet;
-    var idx = cur ? list.indexOf(cur) : -1;
+    var vh = viewportH();
+    var line = readingLine(vh);
+    var list = focusableArticles(vh, line);
+    if (!list.length) {
+      showToast("Gezinecek tweet yok — akış henüz yüklenmemiş olabilir.", { kind: "warn" });
+      return;
+    }
+    var idx = state.focusedTweet ? list.indexOf(state.focusedTweet) : -1;
     if (idx < 0) {
-      // The active tweet was filtered out or unmounted — restart from whatever
-      // is on the reading line now instead of jumping to the top of the list.
-      var near = pickFocused(list, null);
-      idx = near ? list.indexOf(near) : (delta > 0 ? -1 : list.length);
+      // Nothing active, or the active tweet was filtered out / unmounted: land
+      // on the row nearest the reading line rather than stepping from an index
+      // we no longer have. Stepping from a lost index used to send `k` to the
+      // very last loaded tweet, far below the fold.
+      setFocus(nearestArticle(list, vh, line) || list[0], { scroll: true, explicit: true });
+      return;
     }
     var next = Math.max(0, Math.min(list.length - 1, idx + delta));
-    state.articles = list;
-    if (state.focusedTweet) state.focusedTweet.classList.remove("xverim-focused");
-    state.focusedTweet = list[next];
-    if (state.focusedTweet) {
-      state.focusedTweet.classList.add("xverim-focused");
-      scrollArticleIntoView(state.focusedTweet);
-      // Hold this pick through the smooth scroll so applyFocus doesn't retarget
-      // to a tweet we're only scrolling past.
-      state.focusLockUntil = Date.now() + (REDUCED_MOTION ? 120 : 480);
-    }
-    updateFocusBadge();
+    setFocus(list[next], { scroll: true, explicit: true });
   }
 
   function logGuardrail(kind) {
@@ -683,6 +909,9 @@
   function onKeyDown(e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (isTypingTarget(e.target) || isTyping(document.activeElement)) return;
+    // Scrolling by keyboard counts as scrolling away: the reading line takes
+    // over again, exactly as it would after a wheel gesture.
+    if (SCROLL_KEYS[e.key]) releaseExplicitFocus();
     var k = (e.key || "").toLowerCase();
     if (!k) return;
     // While the drafts card is open, 1…9 drops that draft into the reply box —
@@ -1278,6 +1507,13 @@
   // keypress that was meant to close a reply modal.
   document.addEventListener("mousedown", function (e) {
     if (state.popoverEl && !state.popoverEl.contains(e.target)) closePopover();
+    // Pointing at a tweet makes it the active one. Acting with l / f / s on a
+    // row other than the one you just clicked is the worst kind of wrong, and
+    // the reading line alone had no way to know where you were looking.
+    var article = D.getTweetArticle ? D.getTweetArticle(e.target) : null;
+    if (article && getArticles().indexOf(article) >= 0) {
+      setFocus(article, { explicit: true });
+    }
   }, true);
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;
@@ -1341,8 +1577,9 @@
       try { console.warn("[xverim] x-dom not loaded; aborting init"); } catch (_) {}
       return;
     }
+    scheduleFilterSweep();
     startFocusObserver();
-    startFilterObserver();
+    startDomObserver();
     document.addEventListener("keydown", onKeyDown, true);
     loadPanelPos();
     // A resize moves the tweet the card is anchored to, and can strand a panel
@@ -1376,7 +1613,11 @@
       insertDraft: insertDraft,
       openComposerWithText: openComposerWithText,
       togglePanel: togglePanel,
-      applyFilter: applyFilter
+      applyFilter: applyFilter,
+      // Lets you step the active-tweet pass by hand in the inspector, where
+      // there is no other way to look at a single frame of it.
+      applyFocus: applyFocus,
+      articles: getArticles
     };
   }
   if (document.readyState === "loading") {

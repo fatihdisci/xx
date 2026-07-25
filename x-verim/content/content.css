@@ -1,18 +1,44 @@
 /* X Verim — content-script styles. Dark theme, native-looking. */
 
+/* ---------- Active tweet ---------- */
+/* The row itself only gets a faint tint. The ring and its label are drawn by a
+   floating overlay instead of styles inside X's DOM, so they can't be faded by
+   the filter's opacity, can't be clipped or rounded by the row, and can't
+   intercept clicks on real timeline controls. */
 .xverim-focused {
-  outline: 3px solid #1d9bf0 !important;
-  outline-offset: -3px;
-  border-radius: 12px;
-  background-color: rgba(29, 155, 240, 0.07) !important;
-  transition: outline-color 150ms ease, background-color 150ms ease;
+  background-color: rgba(29, 155, 240, 0.05) !important;
+  transition: background-color 160ms ease;
 }
 
-/* ---------- Focus badge ---------- */
-/* Floating (not injected into X's own DOM) so it can never overlap or
-   intercept clicks on real timeline controls. */
-.xverim-focus-badge {
+.xverim-focus-ring {
   position: fixed;
+  top: 0;
+  left: 0;
+  display: none;
+  pointer-events: none;
+  /* Below every surface of ours, far above X's own stacking contexts. */
+  z-index: 2147483640;
+  will-change: transform;
+}
+.xverim-focus-ring-box {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  /* Stated, not inherited: whether the ring hugs the row exactly must not
+     depend on what box-sizing the page's own reset happens to set. */
+  box-sizing: border-box;
+  border: 2px solid rgba(29, 155, 240, 0.95);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 4px rgba(29, 155, 240, 0.12),
+    0 6px 20px rgba(29, 155, 240, 0.10);
+}
+.xverim-focus-badge {
+  position: absolute;
+  left: 10px;
+  top: -11px;
   background: #1d9bf0;
   color: #fff;
   font: 700 10px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -20,9 +46,7 @@
   padding: 3px 9px;
   border-radius: 999px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 0 3px rgba(29, 155, 240, 0.18);
-  pointer-events: none;
   white-space: nowrap;
-  z-index: 2147483646;
 }
 
 .xverim-dim {
@@ -540,8 +564,15 @@ textarea.xverim-draft-text:focus { color: #fff; }
 }
 
 /* ---------- Reduced motion ---------- */
+/* Scoped to our own elements: `*` here also switched off every animation on
+   x.com itself, which is not ours to decide. */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  .xverim-focus-ring, .xverim-focus-ring *,
+  .xverim-toasts, .xverim-toasts *,
+  .xverim-popover, .xverim-popover *,
+  .xverim-panel, .xverim-panel *,
+  .xverim-banner, .xverim-banner *,
+  .xverim-focused, .xverim-dim, .xverim-highlight {
     transition: none !important;
     animation: none !important;
   }
