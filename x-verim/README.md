@@ -224,6 +224,12 @@ length, and a four-word reply is a real reply. `PERSONA.samples` from `config.js
 are pasted in as style anchors — that is the single strongest lever on how much
 the output sounds like you.
 
+Every prompt also states today's real date. A model's sense of "now" is its
+training cutoff, so drafts quietly assumed an earlier year and dated themselves
+to 2024 or 2025. The line is built per request from local date parts (not
+`toISOString()`, which is UTC and names yesterday for anyone east of Greenwich
+late in the evening), so a tab left open overnight doesn't keep yesterday's date.
+
 ## Why the JS files start with a BOM
 
 Safari decodes background scripts as Latin-1 when nothing declares a charset, which

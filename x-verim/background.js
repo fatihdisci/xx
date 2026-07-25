@@ -38,6 +38,24 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     "No engagement bait. No \"thoughts?\", no \"agree?\", no fake enthusiasm, no exclamation marks unless something is actually funny."
   ];
 
+  // A model's sense of "now" is its training cutoff, so drafts quietly assumed
+  // an earlier year — replies dated themselves to 2024 or 2025 and read as
+  // stale. State the real date instead. Local parts, not toISOString(), which is
+  // UTC and would name yesterday for anyone east of Greenwich late in the
+  // evening. Built per request, so a tab left open overnight doesn't keep
+  // yesterday's date.
+  var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  function todayLine() {
+    var d = new Date();
+    var m = d.getMonth() + 1;
+    var day = d.getDate();
+    var iso = d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+    return "Today is " + WEEKDAYS[d.getDay()] + ", " + iso + ". That is the present moment: "
+      + "the current year is " + d.getFullYear() + ", and \"now\", \"this year\", \"lately\" and "
+      + "\"recently\" all mean relative to this date — never relative to whatever year you remember "
+      + "as current. Do not put the date in a draft unless the tweet is actually about timing.";
+  }
+
   function buildSystemPrompt(mode, extraRules) {
     var persona = C.PERSONA || {};
     var respond = (mode === "respond");
@@ -77,6 +95,7 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     } else {
       lines.push("Language: write in " + persona.language + ", the way a native speaker actually types it on X.");
     }
+    lines.push(todayLine());
     if (respond) {
       lines.push("- You just read this tweet and had one reaction. Type that. Nothing more.");
       lines.push("- The source tweet decides the subject. Answer what it is actually about, on its own terms.");
