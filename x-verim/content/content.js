@@ -64,13 +64,13 @@
     panelPos: null,
     popoverEl: null,
     popoverArticle: null,
-    // The active-tweet overlay: one floating wrapper holding the ring and its
-    // label, so both are placed from a single measurement per frame.
-    ringEl: null,
-    ringBoxEl: null,
+    // The active-tweet marker: one floating wrapper holding the accent bar and
+    // its label, so both are placed from a single measurement per frame.
+    markEl: null,
+    barEl: null,
     focusBadgeEl: null,
-    ringVisible: false,
-    ringEnter: false,
+    markVisible: false,
+    markEnter: false,
     // A j/k jump or a click is a deliberate pick: it stays put while you can
     // still see the tweet, instead of the reading line re-picking under you.
     explicitFocus: false,
@@ -330,7 +330,7 @@
     if (prev && prev !== article) prev.classList.remove("xverim-focused");
     state.focusedTweet = article || null;
     if (state.focusedTweet) state.focusedTweet.classList.add("xverim-focused");
-    if (prev !== state.focusedTweet) state.ringEnter = true;
+    if (prev !== state.focusedTweet) state.markEnter = true;
     // Always assigned: a passive re-pick has to drop the stickiness a previous
     // j/k or click earned, or the new row would inherit it.
     state.explicitFocus = !!o.explicit;
@@ -341,86 +341,102 @@
     paintFocus();
   }
 
-  // ---------- Active-tweet overlay ----------
+  // ---------- Active-tweet marker ----------
   // Drawn as a floating element rather than styles on X's own article: it can't
-  // be faded by the niche filter's opacity, can't be clipped or rounded by the
-  // row, and can't fight X's hover backgrounds.
-  function ensureRing() {
-    if (state.ringEl && state.ringEl.isConnected) return state.ringEl;
+  // be faded by the niche filter's opacity, can't be clipped by the row, and
+  // can't fight X's hover backgrounds.
+  //
+  // Deliberately small. A full ring around the row was unmistakable but loud —
+  // it fenced off a card X doesn't draw as a card. The signal is the row's faint
+  // tint; this is just the edge marker that makes it unambiguous.
+  function ensureMark() {
+    if (state.markEl && state.markEl.isConnected) return state.markEl;
     var wrap = document.createElement("div");
-    wrap.className = "xverim-focus-ring";
+    wrap.className = "xverim-active-mark";
     wrap.setAttribute("aria-hidden", "true");
 
-    var box = document.createElement("div");
-    box.className = "xverim-focus-ring-box";
-    wrap.appendChild(box);
+    var bar = document.createElement("div");
+    bar.className = "xverim-active-bar";
+    wrap.appendChild(bar);
 
     var badge = document.createElement("div");
     badge.className = "xverim-focus-badge";
     // The hint is what makes the label teach the extension instead of just
     // marking a tweet — and it follows the configured key, not a hardcoded "a".
     var analyzeKey = String(SC.analyze || "").toUpperCase();
-    badge.textContent = analyzeKey ? ("● Aktif tweet · " + analyzeKey + " taslak") : "● Aktif tweet";
+    badge.textContent = analyzeKey ? ("Aktif tweet · " + analyzeKey + " taslak") : "Aktif tweet";
     wrap.appendChild(badge);
 
     (document.body || document.documentElement).appendChild(wrap);
-    state.ringEl = wrap;
-    state.ringBoxEl = box;
+    state.markEl = wrap;
+    state.barEl = bar;
     state.focusBadgeEl = badge;
-    state.ringVisible = false;
+    state.markVisible = false;
     return wrap;
   }
-  function hideRing() {
-    if (state.ringEl && state.ringVisible) {
-      state.ringEl.style.display = "none";
-      state.ringVisible = false;
+  function hideMark() {
+    if (state.markEl && state.markVisible) {
+      state.markEl.style.display = "none";
+      state.markVisible = false;
     }
   }
-  function playRingEnter() {
-    var box = state.ringBoxEl;
-    if (!box || REDUCED_MOTION || !box.animate) return;
-    // A short settle at the new row, instead of tweening between rows: tweening
-    // would lag behind the scroll it happens during.
+  function playMarkEnter() {
+    var bar = state.barEl;
+    if (!bar || REDUCED_MOTION || !bar.animate) return;
+    // The bar grows into place at the new row, rather than tweening from the old
+    // one: a tween would have to race the scroll it happens during, and lose.
+    // Starts visible, not from zero: a document whose timeline is paused (a
+    // backgrounded tab) holds an animation in its active phase indefinitely, and
+    // a keyframe of opacity 0 would then be a bar that never appears. At 0.35
+    // the worst case is a dimmer bar, and the 160ms fade looks the same.
     try {
-      box.animate(
-        [{ opacity: 0.2, transform: "scale(0.99)" }, { opacity: 1, transform: "scale(1)" }],
-        { duration: 150, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+      bar.animate(
+        [{ opacity: 0.35, transform: "scaleY(0.4)" }, { opacity: 1, transform: "scaleY(1)" }],
+        { duration: 160, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
       );
     } catch (_) {}
   }
+
+  var BAR_MIN = 20, BAR_MAX = 56, BAR_INSET = 12;
   function paintFocus() {
     var article = state.focusedTweet;
     // Hidden entirely while a modal is open (reply / compose): the timeline sits
-    // behind the overlay, and a ring floating over the dialog just looks broken.
-    if (!article || !article.isConnected || xDialogOpen()) { hideRing(); return; }
+    // behind the overlay, and a marker floating over the dialog looks broken.
+    if (!article || !article.isConnected || xDialogOpen()) { hideMark(); return; }
     var vh = viewportH();
     var r = article.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) { hideRing(); return; }
+    if (r.width <= 0 || r.height <= 0) { hideMark(); return; }
     var safe = headerSafe();
-    if (Math.min(r.bottom, vh) - Math.max(r.top, safe) < 16) { hideRing(); return; }
+    // The part of the row you can actually see, between X's sticky header and
+    // the fold. Everything below is placed inside it, which is what keeps the
+    // marker off the header without needing to clip anything.
+    var visTop = Math.max(r.top, safe);
+    var visBottom = Math.min(r.bottom, vh);
+    if (visBottom - visTop < 16) { hideMark(); return; }
 
-    var wrap = ensureRing();
-    if (!state.ringVisible) { wrap.style.display = "block"; state.ringVisible = true; }
+    var wrap = ensureMark();
+    if (!state.markVisible) { wrap.style.display = "block"; state.markVisible = true; }
     // transform (not top/left) so tracking the scroll stays on the compositor.
     wrap.style.transform = "translate3d(" + Math.round(r.left) + "px, " + Math.round(r.top) + "px, 0)";
     wrap.style.width = Math.round(r.width) + "px";
     wrap.style.height = Math.round(r.height) + "px";
 
-    // Cut the ring where X's sticky header and the fold cross it: our overlay
-    // sits above X's stacking context, so an uncut ring would paint over both.
-    var clipTop = Math.max(0, Math.round(safe - r.top));
-    var clipBottom = Math.max(0, Math.round(r.bottom - vh));
-    state.ringBoxEl.style.clipPath = (clipTop || clipBottom)
-      ? ("inset(" + clipTop + "px 0px " + clipBottom + "px 0px)")
-      : "";
+    // Centred on what's visible, not on the row: a tweet taller than the window
+    // would otherwise put its marker off-screen while it is the active one.
+    var band = visBottom - visTop;
+    var barH = Math.max(BAR_MIN, Math.min(BAR_MAX, band - BAR_INSET));
+    if (barH > band) barH = band;   // a sliver of a row still can't overhang it
+    state.barEl.style.height = Math.round(barH) + "px";
+    state.barEl.style.top = Math.round((visTop + visBottom) / 2 - barH / 2 - r.top) + "px";
 
     // The label rides the row's top edge, and drops just inside the row once
     // that edge has scrolled up under the header.
-    state.focusBadgeEl.style.top = (r.top - safe < 14 ? (clipTop + 8) : -11) + "px";
+    var underHeader = Math.max(0, Math.round(safe - r.top));
+    state.focusBadgeEl.style.top = (r.top - safe < 12 ? (underHeader + 6) : -9) + "px";
 
-    if (state.ringEnter) {
-      state.ringEnter = false;
-      playRingEnter();
+    if (state.markEnter) {
+      state.markEnter = false;
+      playMarkEnter();
     }
   }
 
@@ -453,7 +469,7 @@
 
   // One observer for the whole extension: rows appearing, dialogs opening and
   // route changes are all the same signal — "the DOM moved, re-measure".
-  var OUR_UI = ".xverim-focus-ring, .xverim-toasts, .xverim-popover, .xverim-panel, .xverim-banner";
+  var OUR_UI = ".xverim-active-mark, .xverim-toasts, .xverim-popover, .xverim-panel, .xverim-banner";
   function onlyOurUi(records) {
     for (var i = 0; i < records.length; i++) {
       var t = records[i].target;

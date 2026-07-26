@@ -1,16 +1,22 @@
 /* X Verim — content-script styles. Dark theme, native-looking. */
 
 /* ---------- Active tweet ---------- */
-/* The row itself only gets a faint tint. The ring and its label are drawn by a
-   floating overlay instead of styles inside X's DOM, so they can't be faded by
-   the filter's opacity, can't be clipped or rounded by the row, and can't
-   intercept clicks on real timeline controls. */
+/* Three quiet signals instead of one loud one: the row lifts slightly, a short
+   accent bar marks its left edge, and a small label names the key worth
+   pressing. No border — X doesn't draw timeline rows as cards, and framing one
+   made the extension look like it had taken the page over.
+   The bar and label are drawn by a floating overlay rather than by styles
+   inside X's DOM, so they can't be faded by the filter's opacity, can't be
+   clipped by the row, and can't intercept clicks on real timeline controls. */
 .xverim-focused {
-  background-color: rgba(29, 155, 240, 0.05) !important;
-  transition: background-color 160ms ease;
+  background-color: rgba(29, 155, 240, 0.06) !important;
+  /* Short on purpose: while you scroll fast the tint is fading out of the row
+     you left as it fades into the next, and a long one leaves a smear of
+     half-lit rows behind the marker. */
+  transition: background-color 120ms ease;
 }
 
-.xverim-focus-ring {
+.xverim-active-mark {
   position: fixed;
   top: 0;
   left: 0;
@@ -20,44 +26,54 @@
   z-index: 2147483640;
   will-change: transform;
 }
-.xverim-focus-ring-box {
+.xverim-active-bar {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
   left: 0;
-  /* Stated, not inherited: whether the ring hugs the row exactly must not
-     depend on what box-sizing the page's own reset happens to set. */
-  box-sizing: border-box;
-  border: 2px solid rgba(29, 155, 240, 0.95);
-  border-radius: 14px;
-  box-shadow:
-    0 0 0 4px rgba(29, 155, 240, 0.12),
-    0 6px 20px rgba(29, 155, 240, 0.10);
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #1d9bf0;
+  /* Just enough glow to read against a photo or a quoted card. */
+  box-shadow: 0 0 8px rgba(29, 155, 240, 0.45);
 }
 .xverim-focus-badge {
   position: absolute;
-  left: 10px;
-  top: -11px;
-  background: #1d9bf0;
+  left: 11px;
+  top: -9px;
+  background: rgba(29, 155, 240, 0.92);
   color: #fff;
-  font: 700 10px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font: 600 9.5px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   letter-spacing: 0.02em;
-  padding: 3px 9px;
+  padding: 2px 7px;
   border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 0 3px rgba(29, 155, 240, 0.18);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   white-space: nowrap;
 }
 
+/* Dimmed is the soft treatment — "hide" is the hard one. It used to also set
+   pointer-events: none, which meant a dimmed tweet could not be opened, its
+   links could not be clicked, and it could not be selected by clicking. Fading
+   something out is not the same as taking it away, so it stays interactive and
+   comes most of the way back when you point at it. */
 .xverim-dim {
   opacity: 0.35 !important;
-  pointer-events: none;
+}
+/* The transition sits on the hover state, not on the base rule. On the base
+   rule it also animates the moment the class lands on a freshly mounted row —
+   so every dimmed tweet flashed at full opacity for a beat as you scrolled. */
+.xverim-dim:hover {
+  opacity: 0.9 !important;
+  transition: opacity 120ms ease;
 }
 
 .xverim-hide {
   display: none !important;
 }
 
+/* Green, and a hair slimmer than the active bar, because the two used to be the
+   same 3px blue at the same left edge: on a row that was both highlighted and
+   active they sat exactly on top of each other and neither could be read. They
+   mean different things — "matches what you follow" vs "this is the one your
+   keys act on" — so they look different. */
 .xverim-highlight {
   position: relative;
 }
@@ -67,8 +83,8 @@
   left: 0;
   top: 0;
   bottom: 0;
-  width: 3px;
-  background: #1d9bf0;
+  width: 2px;
+  background: #00ba7c;
   border-radius: 2px;
   pointer-events: none;
 }
@@ -567,7 +583,7 @@ textarea.xverim-draft-text:focus { color: #fff; }
 /* Scoped to our own elements: `*` here also switched off every animation on
    x.com itself, which is not ours to decide. */
 @media (prefers-reduced-motion: reduce) {
-  .xverim-focus-ring, .xverim-focus-ring *,
+  .xverim-active-mark, .xverim-active-mark *,
   .xverim-toasts, .xverim-toasts *,
   .xverim-popover, .xverim-popover *,
   .xverim-panel, .xverim-panel *,

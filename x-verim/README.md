@@ -138,14 +138,27 @@ be obvious and never surprising:
   line the moment you scroll — wheel, trackpad, or `Space` / `PageDown` /
   arrows. `j` / `k` land the tweet straddling the same line they're measured
   against, so a jump can never lose the highlight as the scroll settles.
-- The ring and its badge are drawn by a **floating overlay**, not by styles
-  inside X's own markup: it can't be faded by the niche filter, can't be
-  clipped by the row, and can't fight X's hover backgrounds. It's cut where X's
-  sticky header crosses it — and that header's height is measured, not assumed,
-  because the home timeline's tab bar makes it taller than other views.
-- The badge names the analyse key, so the one thing worth pressing is always on
-  screen. It's hidden entirely while a reply or compose dialog is open, and the
+- The marker is deliberately quiet: the row lifts by a 6% tint, a 3px accent bar
+  marks its left edge, and a small chip names the analyse key. **No border** —
+  X doesn't draw timeline rows as cards, and framing one made the extension look
+  like it had taken the page over.
+- The bar and chip are drawn by a **floating overlay**, not by styles inside X's
+  own markup: they can't be faded by the niche filter, can't be clipped by the
+  row, and can't fight X's hover backgrounds. The bar is centred on the part of
+  the row you can actually see, between X's sticky header and the fold, so a
+  tweet taller than the window still shows its marker. That header's height is
+  measured, not assumed, because the home timeline's tab bar makes it taller
+  than other views.
+- The whole marker is hidden while a reply or compose dialog is open, and the
   tweet X copies into that dialog is never focusable.
+- The keyword-highlight bar is **green and 2px**, against the active bar's blue
+  and 3px. Both used to be 3px blue at the same left edge, so on a row that was
+  both they sat exactly on top of each other and neither could be read.
+- A **dimmed** tweet stays interactive and comes back to 90% when you point at
+  it. It used to carry `pointer-events: none`, which meant a dimmed tweet could
+  not be opened, its links could not be clicked, and it could not be selected —
+  fading something out is not the same as taking it away. `hide` remains the
+  hard treatment.
 
 `window.__xverim.applyFocus()` steps the pass by hand in the inspector, and
 `window.__xverim.articles()` returns the rows it considers.
