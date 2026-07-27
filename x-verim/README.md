@@ -266,9 +266,14 @@ default:
   too. Every post landing at exactly `:00` seconds is a fingerprint with no
   innocent explanation.
 
-Content still has to carry its own weight: keep the lines evergreen. They are
-written now and posted on an unknown future day, so anything referencing
-"today", a specific release, or a date will land wrong.
+Content still has to carry its own weight, and the rule is stricter than
+"evergreen": **a scheduled line must not claim anything happened.** These are
+written now and posted on an unknown future day, so "shipped it today" or
+"started four things this week" isn't merely stale when it lands, it's false —
+and a feed of progress reports that never match reality is both a lie and the
+easiest kind of automation to spot. Greetings, wishes and moods are safe
+because they're true whenever they land. Keep the shapes varied (two words up
+to a short sentence) so ten of them don't read as one template.
 
 This is the one sanctioned exception to hard rule 1 — see above. Note that the
 exception is narrow: the extension asks X to publish text the user wrote at a
