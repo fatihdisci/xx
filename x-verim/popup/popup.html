@@ -61,6 +61,14 @@
       <div id="sched-rules"></div>
       <button class="xverim-btn small" id="sched-add" type="button">+ Kural ekle</button>
       <p class="xverim-card-hint">Her satıra bir mesaj yaz. Kural, eşleşen her gün seçtiğin aralıkta rastgele bir dakikaya X'in kendi planlayıcısına kaydedilir — kaydolduktan sonra bilgisayar kapalıyken de paylaşılır.</p>
+      <details class="xverim-sched-io">
+        <summary>İçe / dışa aktar</summary>
+        <textarea id="sched-json" rows="4" spellcheck="false" placeholder="Kural JSON'unu buraya yapıştır ve Yükle'ye bas" aria-label="Kural JSON'u"></textarea>
+        <div class="xverim-sched-io-actions">
+          <button class="xverim-btn small" id="sched-export" type="button">Mevcutları yaz</button>
+          <button class="xverim-btn small primary" id="sched-import" type="button">Yükle</button>
+        </div>
+      </details>
     </section>
 
     <section class="xverim-card" data-card="counters">

@@ -2,3 +2,7 @@ config.js
 .DS_Store
 node_modules/
 *.log
+
+# Scheduled-post content: the whole point is that it does not read as
+# pre-written, so it does not belong in a public repo.
+planlama-*.json

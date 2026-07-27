@@ -1606,8 +1606,9 @@
   var SCHED_RULES_KEY = "xverim_schedule_v1";
   var SCHED_STATE_KEY = "xverim_schedule_state_v1";
   var SCHED_QID_KEY = "xverim_sched_qid_v1";   // discovered {qid, bearer}
-  var SCHED_TICK_MS = 45000;
-  var SCHED_MAX_PENDING = 20;   // outstanding registrations — pace beats reach
+  var SCHED_TICK_MS = 30000;
+  var SCHED_MAX_PER_TICK = 4;   // registrations per pass, spaced — not a burst
+  var SCHED_MAX_PENDING = 40;   // outstanding registrations — pace beats reach
   var SCHED_MIN_LEAD_MIN = 5;   // X rejects an execute_at that is nearly now
   var SCHED_LOOKAHEAD_DAYS = 7; // how far ahead slots are handed to X
   // X's public web-app token. It ships in x.com's own JS for every visitor and
@@ -1768,6 +1769,22 @@
   // For every rule, make sure each matching day in the lookahead window already
   // has a slot registered with X. Once registered the browser is out of the
   // loop entirely — X posts it whether or not this machine is even on.
+  // A minute that doesn't look chosen by a machine. Uniform inside the window,
+  // then nudged off the quarter-hours: a uniform draw lands on :00 or :30 often
+  // enough that, across a month of posts, the round ones are the only thing
+  // anybody would notice. Seconds are random too — every scheduled post landing
+  // at exactly :00 seconds is a fingerprint nothing else would explain.
+  function schedPickMinute(start, end) {
+    var span = Math.max(1, end - start);
+    var minute = start + Math.floor(Math.random() * span);
+    if (minute % 15 === 0 && span > 8) {
+      minute += (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.random() * 4));
+      if (minute < start) minute = start + 1;
+      if (minute >= end) minute = end - 1;
+    }
+    return minute;
+  }
+
   function schedOccurrences(rule) {
     var out = [];
     var start = schedParseHM(rule.start), end = schedParseHM(rule.end);
@@ -1777,10 +1794,9 @@
     for (var offset = 0; offset <= SCHED_LOOKAHEAD_DAYS; offset++) {
       var day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
       if (!schedDayMatches(rule.days, day)) continue;
-      // A minute picked once and remembered: re-rolling it every pass would
-      // move a slot that X has already been told about.
-      var minute = start + Math.floor(Math.random() * Math.max(1, end - start));
-      var at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minute, 0, 0).getTime();
+      var minute = schedPickMinute(start, end);
+      var at = new Date(day.getFullYear(), day.getMonth(), day.getDate(),
+                        0, minute, Math.floor(Math.random() * 60), 0).getTime();
       // Too close to now (or past) is not a plan — skip to the next day rather
       // than firing something the user never saw coming.
       if (at - nowMs < SCHED_MIN_LEAD_MIN * 60000) continue;
@@ -1789,6 +1805,20 @@
     return out;
   }
 
+  // Posting every single matching day, without ever missing one, is the loudest
+  // tell there is — no human keeps a 100% streak for a month. `skip` is the
+  // percentage of otherwise-matching days the rule quietly sits out. The roll
+  // happens once per day and is recorded, so it can't flip between passes.
+  function schedRollSkip(rule) {
+    var pct = Number(rule.skip);
+    if (!(pct > 0)) return false;
+    return Math.random() * 100 < Math.min(90, pct);
+  }
+
+  // "bag" is the default and the reason drafts don't repeat: draw without
+  // replacement until every message has been used, then reshuffle. Pure random
+  // posts "Günaydın" twice in one week while another line never appears, which
+  // reads worse than a rotation. The bag is stored, so it survives reloads.
   function schedPickMessage(rule, meta) {
     var msgs = schedMessages(rule);
     if (!msgs.length) return null;
@@ -1797,7 +1827,26 @@
       meta.seq = idx + 1;
       return msgs[idx];
     }
-    return msgs[Math.floor(Math.random() * msgs.length)];
+    if (rule.order === "random") return msgs[Math.floor(Math.random() * msgs.length)];
+
+    var bag = Array.isArray(meta.bag) ? meta.bag.filter(function (i) { return i < msgs.length; }) : [];
+    if (!bag.length) {
+      for (var i = 0; i < msgs.length; i++) bag.push(i);
+      // Fisher-Yates, minus the last message drawn, so a reshuffle can't hand
+      // back the same line two days running.
+      for (var j = bag.length - 1; j > 0; j--) {
+        var k = Math.floor(Math.random() * (j + 1));
+        var tmp = bag[j]; bag[j] = bag[k]; bag[k] = tmp;
+      }
+      if (bag.length > 1 && bag[bag.length - 1] === meta.last) {
+        bag[bag.length - 1] = bag[0];
+        bag[0] = meta.last;
+      }
+    }
+    var pick = bag.pop();
+    meta.bag = bag;
+    meta.last = pick;
+    return msgs[pick];
   }
 
   function schedPrune(state) {
@@ -1820,48 +1869,63 @@
       var pending = 0;
       for (var k in state) { if (state[k] && state[k].at > Date.now() && state[k].ok) pending++; }
 
-      var todo = null, todoRule = null;
-      for (var i = 0; i < plan.rules.length && !todo; i++) {
+      // Walk every rule's unbooked days. Skipped days cost nothing, so they are
+      // resolved here and now; real registrations are a network call each, so
+      // only a few go out per tick — spacing them is both kinder to X and less
+      // machine-like than firing thirty mutations in one burst.
+      var queue = [];
+      for (var i = 0; i < plan.rules.length; i++) {
         var rule = plan.rules[i];
         if (!rule || !rule.enabled || !rule.id || !schedMessages(rule).length) continue;
+        var meta = state[rule.id + "#seq"] || (state[rule.id + "#seq"] = { seq: 0 });
         var occ = schedOccurrences(rule);
         for (var j = 0; j < occ.length; j++) {
-          var cur = state[occ[j].key];
-          // Anything already attempted stays attempted. Retrying a slot whose
+          // Anything already decided stays decided. Re-rolling a slot whose
           // response we lost is how you end up posting the same line twice.
-          if (cur) continue;
-          todo = occ[j];
-          todoRule = rule;
-          break;
+          if (state[occ[j].key]) continue;
+          if (schedRollSkip(rule)) {
+            state[occ[j].key] = { at: occ[j].at, skipped: true, rule: rule.id };
+            continue;
+          }
+          if (queue.length + pending >= SCHED_MAX_PENDING) break;
+          if (queue.length >= SCHED_MAX_PER_TICK) break;
+          var text = schedPickMessage(rule, meta);
+          if (!text) break;
+          // Claim before the network call, so a second tab doesn't register the
+          // same slot while this one is waiting on X.
+          state[occ[j].key] = { at: occ[j].at, ok: false, by: schedInstanceId, ts: Date.now(), rule: rule.id };
+          queue.push({ key: occ[j].key, at: occ[j].at, text: text, label: rule.label || "Plan" });
         }
       }
-      if (!todo || !todoRule) { schedStorageSet(getStatePatch(state)); return; }
-      if (pending >= SCHED_MAX_PENDING) return;
+      if (!queue.length) { schedStorageSet(getStatePatch(state)); return; }
 
-      // Claim before the network call so a second tab doesn't register the
-      // same slot while this one is waiting on X.
       schedBusy = true;
-      var meta = state[todoRule.id + "#seq"] || (state[todoRule.id + "#seq"] = { seq: 0 });
-      var text = schedPickMessage(todoRule, meta);
-      state[todo.key] = { at: todo.at, ok: false, by: schedInstanceId, ts: Date.now(), rule: todoRule.id };
-      if (!text) { schedBusy = false; schedStorageSet(getStatePatch(state)); return; }
-
       schedStorageSet(getStatePatch(state)).then(function () {
-        return schedRegister(text, todo.at);
-      }).then(function (id) {
-        state[todo.key].ok = true;
-        state[todo.key].xid = id;
-        schedStorageSet(getStatePatch(state));
-        schedBusy = false;
-      }).catch(function (e) {
-        state[todo.key].error = String((e && e.message) || e);
-        schedStorageSet(getStatePatch(state));
-        schedBusy = false;
-        if (!schedWarned) {
-          schedWarned = true;
-          showToast("Planlama: X'e kaydedilemedi — " + state[todo.key].error, { kind: "error", duration: 6000 });
+        var n = 0;
+        function step() {
+          if (n >= queue.length) {
+            schedBusy = false;
+            return schedStorageSet(getStatePatch(state));
+          }
+          var item = queue[n++];
+          return schedRegister(item.text, item.at).then(function (id) {
+            state[item.key].ok = true;
+            state[item.key].xid = id;
+          }).catch(function (e) {
+            state[item.key].error = String((e && e.message) || e);
+            if (!schedWarned) {
+              schedWarned = true;
+              showToast("Planlama: X'e kaydedilemedi — " + state[item.key].error, { kind: "error", duration: 6000 });
+            }
+          }).then(function () {
+            return schedStorageSet(getStatePatch(state));
+          }).then(function () {
+            // A human-ish gap between mutations rather than a tight loop.
+            return new Promise(function (r) { setTimeout(r, 900 + Math.floor(Math.random() * 700)); });
+          }).then(step);
         }
-      });
+        return step();
+      }).catch(function () { schedBusy = false; });
     });
   }
   function getStatePatch(state) {

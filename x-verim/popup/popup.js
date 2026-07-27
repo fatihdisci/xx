@@ -329,7 +329,8 @@
       days: "all",
       start: "09:00",
       end: "12:00",
-      order: "random",
+      order: "bag",
+      skip: 15,
       messages: ""
     };
   }
@@ -406,20 +407,35 @@
 
     var order = document.createElement("select");
     order.className = "xverim-sched-order";
-    [["random", "Rastgele"], ["sequential", "Sırayla"]].forEach(function (o) {
+    order.title = "Mesaj sırası";
+    [["bag", "Tekrarsız"], ["random", "Rastgele"], ["sequential", "Sırayla"]].forEach(function (o) {
       var opt = document.createElement("option");
       opt.value = o[0];
       opt.textContent = o[1];
       order.appendChild(opt);
     });
-    order.value = rule.order || "random";
+    order.value = rule.order || "bag";
     order.addEventListener("change", function () { rule.order = order.value; schedSave(); });
+
+    // Never missing a day is the giveaway, so skipping some is a feature.
+    var skip = document.createElement("select");
+    skip.className = "xverim-sched-order";
+    skip.title = "Bazı günleri atlama oranı";
+    [["0", "Hiç atlama"], ["15", "%15 atla"], ["25", "%25 atla"], ["40", "%40 atla"]].forEach(function (o) {
+      var opt = document.createElement("option");
+      opt.value = o[0];
+      opt.textContent = o[1];
+      skip.appendChild(opt);
+    });
+    skip.value = String(Number(rule.skip) || 0);
+    skip.addEventListener("change", function () { rule.skip = Number(skip.value) || 0; schedSave(); });
 
     when.appendChild(days);
     when.appendChild(order);
     when2.appendChild(start);
     when2.appendChild(dash);
     when2.appendChild(end);
+    when2.appendChild(skip);
 
     var msgs = document.createElement("textarea");
     msgs.className = "xverim-sched-msgs";
@@ -484,6 +500,62 @@
     }
   }
 
+  // Typing fifty lines through a 380px popup is not a thing anyone should do,
+  // so rules go in and out as JSON. Import replaces the rule list wholesale
+  // and is deliberately loud about it: it is the one destructive button here.
+  var SCHED_DAY_VALUES = { all: 1, wd: 1, we: 1, 0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1 };
+  function schedNormalizeRule(raw, i) {
+    if (!raw || typeof raw !== "object") throw new Error((i + 1) + ". kural bir nesne değil");
+    var messages = raw.messages;
+    if (Array.isArray(messages)) messages = messages.join("\n");
+    messages = String(messages == null ? "" : messages);
+    if (!messages.split(/[\n|]+/).some(function (s) { return s.trim(); })) {
+      throw new Error((i + 1) + ". kuralda hiç mesaj yok");
+    }
+    var start = String(raw.start || "").trim(), end = String(raw.end || "").trim();
+    if (!/^\d{1,2}:\d{2}$/.test(start) || !/^\d{1,2}:\d{2}$/.test(end)) {
+      throw new Error((i + 1) + ". kuralın saati SS:DD olmalı");
+    }
+    var days = String(raw.days == null ? "all" : raw.days);
+    if (!SCHED_DAY_VALUES[days]) throw new Error((i + 1) + ". kuralın gün değeri geçersiz: " + days);
+    return {
+      // A fresh id per import: reusing one would inherit the old rule's
+      // already-registered days and silently skip the new content.
+      id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + i,
+      enabled: raw.enabled !== false,
+      label: String(raw.label || "").slice(0, 60),
+      days: days,
+      start: start,
+      end: end,
+      order: (raw.order === "random" || raw.order === "sequential") ? raw.order : "bag",
+      skip: Math.max(0, Math.min(90, Number(raw.skip) || 0)),
+      messages: messages
+    };
+  }
+  function schedImport() {
+    var box = $("sched-json");
+    var text = String(box.value || "").trim();
+    if (!text) { setStatus("Önce JSON yapıştır.", "warn"); return; }
+    var parsed;
+    try { parsed = JSON.parse(text); }
+    catch (e) { setStatus("JSON okunamadı: " + String((e && e.message) || e), "error", 0); return; }
+    var list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.rules) ? parsed.rules : null);
+    if (!list || !list.length) { setStatus("JSON içinde kural dizisi yok.", "error", 0); return; }
+    var rules = [];
+    try {
+      for (var i = 0; i < list.length; i++) rules.push(schedNormalizeRule(list[i], i));
+    } catch (e2) { setStatus(String((e2 && e2.message) || e2), "error", 0); return; }
+    if (schedPlan.rules.length &&
+        !window.confirm("Mevcut " + schedPlan.rules.length + " kural silinip yerine " + rules.length + " kural yüklenecek. Devam?")) {
+      return;
+    }
+    schedPlan.rules = rules;
+    schedSaveNow();
+    schedRender();
+    box.value = "";
+    setStatus(rules.length + " kural yüklendi. Planlamayı açmayı unutma.", null, 4000);
+  }
+
   function loadSchedule() {
     try {
       chrome.storage.local.get([SCHED_RULES_KEY, SCHED_STATE_KEY], function (d) {
@@ -524,6 +596,13 @@
       schedRender();
       schedSave();
     });
+    $("sched-export").addEventListener("click", function () {
+      $("sched-json").value = JSON.stringify(schedPlan.rules, null, 2);
+      setStatus("Mevcut kurallar yazıldı, kopyalayıp saklayabilirsin.", null, 2600);
+    });
+    $("sched-import").addEventListener("click", schedImport);
+    // Enter and Cmd+Enter belong to the JSON box while it has focus.
+    $("sched-json").addEventListener("keydown", function (e) { e.stopPropagation(); });
 
     $("filter-enabled").addEventListener("change", function (e) {
       var v = !!e.target.checked;

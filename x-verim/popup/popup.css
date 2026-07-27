@@ -230,6 +230,32 @@ textarea.xverim-sched-msgs {
 }
 #sched-add { margin-top: 2px; }
 
+.xverim-sched-io { margin-top: 8px; }
+.xverim-sched-io > summary {
+  cursor: pointer;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #71767b;
+  list-style: none;
+  outline: none;
+  padding: 2px 0;
+}
+.xverim-sched-io > summary::-webkit-details-marker { display: none; }
+.xverim-sched-io > summary:hover { color: #e7e9ea; }
+.xverim-sched-io[open] > summary { color: #e7e9ea; margin-bottom: 6px; }
+#sched-json {
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+  min-height: 64px;
+}
+.xverim-sched-io-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
 /* Pace meters — same shape as the on-page panel, so the two read as one tool. */
 .xverim-meter-row { margin-top: 8px; }
 .xverim-meter-head {

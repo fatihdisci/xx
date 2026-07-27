@@ -239,9 +239,36 @@ Mechanics worth knowing:
 - A window that has already closed today is skipped to the next matching day,
   and anything less than 5 minutes out is skipped too (X rejects an
   `execute_at` that is nearly now).
-- At most 20 outstanding registrations across all rules.
+- At most 40 outstanding registrations, at most 4 per pass, spaced ~1 s apart.
 - Each rule shows its real state in the popup: `3 mesaj · X'e kayıtlı ·
   sıradaki yarın 08:12 (+4)`, or the error X returned.
+- **İçe / dışa aktar** takes the rule list as JSON, because typing fifty lines
+  through a 380px popup is not a thing anyone should do. Import replaces the
+  whole list and asks first. Keep your own rules in a `planlama-*.json` beside
+  the extension — that pattern is gitignored, since content that is supposed
+  to read as unplanned has no business in a public repo.
+
+#### Not looking automated
+
+Timing alone doesn't hide a schedule. Three things do, and all three are on by
+default:
+
+- **No repeats until the list is exhausted.** `Tekrarsız` (the default) draws
+  without replacement and reshuffles only when the bag is empty, never handing
+  back the line it just used. Pure random posts one greeting twice in a week
+  while another never appears, which reads worse than an obvious rotation.
+- **Missed days.** `%15/%25/%40 atla` sits out that share of otherwise-matching
+  days. An unbroken 60-day streak is the loudest tell there is; nothing else
+  about the posts matters if they never miss.
+- **No round minutes.** A uniform draw lands on `:00` and `:30` often enough
+  that, over a month, those are the only ones anyone would notice — so a
+  quarter-hour hit gets nudged a few minutes off, and the seconds are random
+  too. Every post landing at exactly `:00` seconds is a fingerprint with no
+  innocent explanation.
+
+Content still has to carry its own weight: keep the lines evergreen. They are
+written now and posted on an unknown future day, so anything referencing
+"today", a specific release, or a date will land wrong.
 
 This is the one sanctioned exception to hard rule 1 — see above. Note that the
 exception is narrow: the extension asks X to publish text the user wrote at a
