@@ -141,7 +141,7 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     var base = (C.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1").replace(/\/+$/, "");
     var url = base + "/chat/completions";
     var body = {
-      model: C.DEEPSEEK_MODEL || "deepseek-v4-pro",
+      model: C.DEEPSEEK_MODEL || "deepseek-v4-flash",
       messages: messages,
       temperature: typeof o.temperature === "number" ? o.temperature : (C.AI_TEMPERATURE != null ? C.AI_TEMPERATURE : 0.8)
     };
