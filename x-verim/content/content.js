@@ -6,9 +6,12 @@
 //   4. Niche filter        — MutationObserver + rAF sweep, dim/hide/highlight
 //   5. Floating panel      — filter toggle + counters, draggable
 //   6. Analyze popover     — small dark card: translation + reply drafts (a)
-//   7. Guardrail banner    — non-blocking warning when pace exceeds the limit
+//   7. Scheduled posts     — user-planned message lists, posted in-window
+//   8. Guardrail banner    — non-blocking warning when pace exceeds the limit
 //
-// HARD RULE: never auto-click submit (tweetButton / tweetButtonInline).
+// HARD RULE: never auto-click submit (tweetButton / tweetButtonInline) —
+//   except the scheduler posting a message the user planned themselves, at
+//   the time they chose. That path is opt-in and the only one allowed to click.
 // HARD RULE: only use data-testid / role / aria-label selectors (lib/x-dom.js).
 (function () {
   "use strict";
@@ -1578,6 +1581,304 @@
     if (state.panelEl && state.panelEl.classList.contains("xverim-open") && !xDialogOpen()) togglePanel(false);
   });
 
+  // ============== Scheduled posts (Planlama) ==============
+  // Posts the user planned in the popup's Planlama card: message lists split
+  // on |, one post per matching day at a random minute inside the chosen
+  // window. This is the single, deliberate exception to the "never auto-click
+  // submit" rule — the human chose the text and the window; we only pick the
+  // minute. Opt-in, off by default.
+  //
+  // Server-side, so the machine does not have to be on. Each slot is handed to
+  // X's OWN scheduled-posts system through the same CreateScheduledTweet
+  // GraphQL call its composer makes behind "Gönderiyi planla" — authorised by
+  // the user's session cookies, which we never read. Once registered the post
+  // lives in X's queue (Planlanan gönderiler, g+t) and goes out with the
+  // browser closed; a tab only has to be open long enough to register it,
+  // which is why slots are booked up to a week ahead.
+  //
+  // X rotates the GraphQL operation id on their deploys, so a stale id is
+  // expected rather than exceptional: a 400/404 triggers one rediscovery pass
+  // over the bundles this page already loaded, and the fresh id is cached.
+  //
+  // Two storage keys on purpose: the popup owns the plan (rules + master
+  // switch), this script owns the runtime state (what has been handled). One
+  // shared key would let a popup save clobber an in-flight claim.
+  var SCHED_RULES_KEY = "xverim_schedule_v1";
+  var SCHED_STATE_KEY = "xverim_schedule_state_v1";
+  var SCHED_QID_KEY = "xverim_sched_qid_v1";   // discovered {qid, bearer}
+  var SCHED_TICK_MS = 45000;
+  var SCHED_MAX_PENDING = 20;   // outstanding registrations — pace beats reach
+  var SCHED_MIN_LEAD_MIN = 5;   // X rejects an execute_at that is nearly now
+  var SCHED_LOOKAHEAD_DAYS = 7; // how far ahead slots are handed to X
+  // X's public web-app token. It ships in x.com's own JS for every visitor and
+  // identifies the client, not the person — the session cookie is what proves
+  // who you are. Verified against the operation id in the same bundle.
+  var SCHED_BEARER = "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
+  var SCHED_CREATE_QID_DEFAULT = "LCVzRQGxOaGnOnYH01NQXg";
+  // Random instance id: content scripts can't see their tab id, and the claim
+  // written below has to be attributable to one of them.
+  var schedInstanceId = "t" + Math.random().toString(36).slice(2, 10);
+  var schedTimer = null;
+  var schedBusy = false;
+  var schedWarned = false;   // one failure toast per tab, not one per tick
+
+  function schedStorageGet(keys) {
+    return new Promise(function (resolve) {
+      try { chrome.storage.local.get(keys, function (d) { resolve(d || {}); }); }
+      catch (_) { resolve({}); }
+    });
+  }
+  function schedStorageSet(obj) {
+    return new Promise(function (resolve) {
+      try { chrome.storage.local.set(obj, function () { resolve(); }); }
+      catch (_) { resolve(); }
+    });
+  }
+
+  function schedParseHM(s) {
+    var m = /^(\d{1,2}):(\d{2})$/.exec(String(s || "").trim());
+    if (!m) return null;
+    var v = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    return (v >= 0 && v < 1440) ? v : null;
+  }
+  function schedDayKey(d) {
+    var m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+  }
+  // days: "all" | "wd" (Mon-Fri) | "we" (Sat-Sun) | "0".."6" (JS getDay, 0=Sunday)
+  function schedDayMatches(days, date) {
+    var dow = (date || new Date()).getDay();
+    if (!days || days === "all") return true;
+    if (days === "wd") return dow >= 1 && dow <= 5;
+    if (days === "we") return dow === 0 || dow === 6;
+    return String(dow) === String(days);
+  }
+  // One message per line — that is just the Enter key, whereas "|" is a
+  // three-finger gymnastic on a Turkish layout. Pipes still split, so a list
+  // pasted from somewhere else keeps working.
+  function schedMessages(rule) {
+    return String(rule.messages || "").split(/[\n|]+/)
+      .map(function (s) { return s.trim(); })
+      .filter(Boolean);
+  }
+
+  // ---- X's GraphQL scheduler ----
+  // Same call x.com's own composer makes when you pick "Gönderiyi planla":
+  // CreateScheduledTweet, with {post_tweet_request, execute_at} and the tweet's
+  // rest_id back. It runs from this page, so the user's own cookies authorise
+  // it and no credential of theirs is ever read, stored or sent anywhere else.
+  function schedCsrfToken() {
+    var m = /(?:^|;\s*)ct0=([^;]+)/.exec(document.cookie || "");
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+
+  // The operation id is baked into whichever bundle X shipped today, so it
+  // changes under us on their deploys. Read it out of the bundles this very
+  // page loaded rather than pinning a constant that silently rots.
+  function schedDiscoverQid() {
+    var urls = [];
+    try {
+      var entries = performance.getEntriesByType("resource") || [];
+      for (var i = 0; i < entries.length; i++) {
+        var u = entries[i].name || "";
+        if (u.indexOf("abs.twimg.com") >= 0 && /Scheduling|Compose|main\./.test(u) && /\.js($|\?)/.test(u)) {
+          urls.push(u);
+        }
+      }
+    } catch (_) {}
+    // Newest-looking first: the scheduling chunk is the one that defines it.
+    urls.sort(function (a, b) { return (b.indexOf("Scheduling") >= 0) - (a.indexOf("Scheduling") >= 0); });
+    var idx = 0;
+    function next() {
+      if (idx >= urls.length || idx >= 4) return Promise.resolve("");
+      return fetch(urls[idx++]).then(function (r) { return r.ok ? r.text() : ""; }).then(function (src) {
+        var m = /queryId:"([\w-]{12,})",operationName:"CreateScheduledTweet"/.exec(src)
+             || /operationName:"CreateScheduledTweet"[^}]*?queryId:"([\w-]{12,})"/.exec(src);
+        return m ? m[1] : next();
+      }).catch(next);
+    }
+    return next();
+  }
+
+  function schedGraphQL(qid, text, executeAtMs) {
+    var csrf = schedCsrfToken();
+    if (!csrf) return Promise.reject(new Error("oturum bulunamadı, x.com'a giriş yapılı olmalı"));
+    return fetch("https://x.com/i/api/graphql/" + qid + "/CreateScheduledTweet", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+        "authorization": "Bearer " + SCHED_BEARER,
+        "x-csrf-token": csrf,
+        "x-twitter-auth-type": "OAuth2Session",
+        "x-twitter-active-user": "yes"
+      },
+      body: JSON.stringify({
+        variables: {
+          post_tweet_request: {
+            auto_populate_reply_metadata: false,
+            exclude_reply_user_ids: [],
+            media_ids: [],
+            status: text
+          },
+          execute_at: Math.floor(executeAtMs / 1000)
+        },
+        queryId: qid
+      })
+    }).then(function (res) {
+      return res.text().then(function (body) {
+        var data = null;
+        try { data = JSON.parse(body); } catch (_) {}
+        if (res.status === 404 || res.status === 400) {
+          var err = new Error("işlem kimliği eskimiş (" + res.status + ")");
+          err.staleQid = true;
+          throw err;
+        }
+        if (!res.ok) throw new Error("X " + res.status);
+        if (data && data.errors && data.errors.length) {
+          throw new Error(String(data.errors[0].message || "X hatası"));
+        }
+        var id = data && data.data && data.data.tweet && data.data.tweet.rest_id;
+        if (!id) throw new Error("X bir plan kimliği döndürmedi");
+        return String(id);
+      });
+    });
+  }
+
+  // Register once, retrying exactly once with a freshly discovered operation
+  // id. Two attempts max — a loop here would mean duplicate scheduled posts.
+  function schedRegister(text, executeAtMs) {
+    return schedStorageGet([SCHED_QID_KEY]).then(function (d) {
+      var qid = (d[SCHED_QID_KEY] && d[SCHED_QID_KEY].qid) || SCHED_CREATE_QID_DEFAULT;
+      return schedGraphQL(qid, text, executeAtMs).catch(function (e) {
+        if (!e || !e.staleQid) throw e;
+        return schedDiscoverQid().then(function (fresh) {
+          if (!fresh || fresh === qid) throw e;
+          var patch = {};
+          patch[SCHED_QID_KEY] = { qid: fresh, at: Date.now() };
+          return schedStorageSet(patch).then(function () {
+            return schedGraphQL(fresh, text, executeAtMs);
+          });
+        });
+      });
+    });
+  }
+
+  // ---- Planning pass ----
+  // For every rule, make sure each matching day in the lookahead window already
+  // has a slot registered with X. Once registered the browser is out of the
+  // loop entirely — X posts it whether or not this machine is even on.
+  function schedOccurrences(rule) {
+    var out = [];
+    var start = schedParseHM(rule.start), end = schedParseHM(rule.end);
+    if (start == null || end == null || end <= start) return out;
+    var now = new Date();
+    var nowMs = now.getTime();
+    for (var offset = 0; offset <= SCHED_LOOKAHEAD_DAYS; offset++) {
+      var day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+      if (!schedDayMatches(rule.days, day)) continue;
+      // A minute picked once and remembered: re-rolling it every pass would
+      // move a slot that X has already been told about.
+      var minute = start + Math.floor(Math.random() * Math.max(1, end - start));
+      var at = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minute, 0, 0).getTime();
+      // Too close to now (or past) is not a plan — skip to the next day rather
+      // than firing something the user never saw coming.
+      if (at - nowMs < SCHED_MIN_LEAD_MIN * 60000) continue;
+      out.push({ key: rule.id + "@" + schedDayKey(day), at: at });
+    }
+    return out;
+  }
+
+  function schedPickMessage(rule, meta) {
+    var msgs = schedMessages(rule);
+    if (!msgs.length) return null;
+    if (rule.order === "sequential") {
+      var idx = ((meta.seq || 0) % msgs.length + msgs.length) % msgs.length;
+      meta.seq = idx + 1;
+      return msgs[idx];
+    }
+    return msgs[Math.floor(Math.random() * msgs.length)];
+  }
+
+  function schedPrune(state) {
+    // Registrations whose time is well past have either fired on X or failed
+    // there; either way they are history and the key would grow forever.
+    var cutoff = Date.now() - 3 * 24 * 3600 * 1000;
+    for (var k in state) {
+      if (k.indexOf("@") > 0 && state[k] && state[k].at && state[k].at < cutoff) delete state[k];
+    }
+  }
+
+  function schedTick() {
+    if (schedBusy) return;
+    schedStorageGet([SCHED_RULES_KEY, SCHED_STATE_KEY]).then(function (d) {
+      var plan = d[SCHED_RULES_KEY] || {};
+      if (!plan.enabled || !Array.isArray(plan.rules) || !plan.rules.length) return;
+      var state = d[SCHED_STATE_KEY] || {};
+      schedPrune(state);
+
+      var pending = 0;
+      for (var k in state) { if (state[k] && state[k].at > Date.now() && state[k].ok) pending++; }
+
+      var todo = null, todoRule = null;
+      for (var i = 0; i < plan.rules.length && !todo; i++) {
+        var rule = plan.rules[i];
+        if (!rule || !rule.enabled || !rule.id || !schedMessages(rule).length) continue;
+        var occ = schedOccurrences(rule);
+        for (var j = 0; j < occ.length; j++) {
+          var cur = state[occ[j].key];
+          // Anything already attempted stays attempted. Retrying a slot whose
+          // response we lost is how you end up posting the same line twice.
+          if (cur) continue;
+          todo = occ[j];
+          todoRule = rule;
+          break;
+        }
+      }
+      if (!todo || !todoRule) { schedStorageSet(getStatePatch(state)); return; }
+      if (pending >= SCHED_MAX_PENDING) return;
+
+      // Claim before the network call so a second tab doesn't register the
+      // same slot while this one is waiting on X.
+      schedBusy = true;
+      var meta = state[todoRule.id + "#seq"] || (state[todoRule.id + "#seq"] = { seq: 0 });
+      var text = schedPickMessage(todoRule, meta);
+      state[todo.key] = { at: todo.at, ok: false, by: schedInstanceId, ts: Date.now(), rule: todoRule.id };
+      if (!text) { schedBusy = false; schedStorageSet(getStatePatch(state)); return; }
+
+      schedStorageSet(getStatePatch(state)).then(function () {
+        return schedRegister(text, todo.at);
+      }).then(function (id) {
+        state[todo.key].ok = true;
+        state[todo.key].xid = id;
+        schedStorageSet(getStatePatch(state));
+        schedBusy = false;
+      }).catch(function (e) {
+        state[todo.key].error = String((e && e.message) || e);
+        schedStorageSet(getStatePatch(state));
+        schedBusy = false;
+        if (!schedWarned) {
+          schedWarned = true;
+          showToast("Planlama: X'e kaydedilemedi — " + state[todo.key].error, { kind: "error", duration: 6000 });
+        }
+      });
+    });
+  }
+  function getStatePatch(state) {
+    var obj = {};
+    obj[SCHED_STATE_KEY] = state;
+    return obj;
+  }
+
+  function startScheduler() {
+    if (schedTimer) return;
+    // One pass shortly after load registers everything due in the lookahead
+    // window; after that a slow tick is enough, since the posting itself is
+    // X's job now, not this tab's.
+    setTimeout(schedTick, 5000);
+    schedTimer = setInterval(schedTick, SCHED_TICK_MS);
+  }
+
   // ============== Guardrail banner ==============
   function showBanner(kind) {
     if (state.guardrailBannerEl && state.guardrailBannerEl.parentNode) {
@@ -1637,6 +1938,7 @@
     scheduleFilterSweep();
     startFocusObserver();
     startDomObserver();
+    startScheduler();
     document.addEventListener("keydown", onKeyDown, true);
     loadPanelPos();
     // A resize moves the tweet the card is anchored to, and can strand a panel

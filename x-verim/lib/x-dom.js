@@ -22,8 +22,11 @@
     follow:             'button[data-testid$="-follow"]',
     unfollow:           'button[data-testid$="-unfollow"]',
     composer:           '[data-testid="tweetTextarea_0"]',
-    submitInline:       '[data-testid="tweetButtonInline"]',  // NEVER auto-click
-    submitModal:        '[data-testid="tweetButton"]',        // NEVER auto-click
+    // NEVER auto-clicked — with one deliberate exception: a post the user
+    // scheduled in the Planlama UI, at the time they chose. Nothing else may
+    // press these.
+    submitInline:       '[data-testid="tweetButtonInline"]',
+    submitModal:        '[data-testid="tweetButton"]',
     newTweetButton:     '[data-testid="SideNav_NewTweet_Button"]',
     verified:           'svg[data-testid="icon-verified"]',
     primaryColumn:      '[data-testid="primaryColumn"]'
@@ -92,6 +95,19 @@
 
   function getComposer() {
     return document.querySelector(SELECTORS.composer);
+  }
+
+  // The submit button that posts what is currently in `composer`: the modal's
+  // own button when the composer sits in a rendered dialog, the inline one
+  // otherwise. Callers own the decision to click — see the note on the
+  // selectors above.
+  function getSubmitButton(composer) {
+    if (!composer) return null;
+    var dialog = composer.closest && composer.closest('[role="dialog"]');
+    if (dialog && dialog.getClientRects && dialog.getClientRects().length) {
+      return dialog.querySelector(SELECTORS.submitModal);
+    }
+    return document.querySelector(SELECTORS.submitInline);
   }
 
   function getNewTweetButton() {
@@ -202,6 +218,7 @@
     getReplyButton: getReplyButton,
     getFollowButton: getFollowButton,
     getComposer: getComposer,
+    getSubmitButton: getSubmitButton,
     getNewTweetButton: getNewTweetButton,
     parseTrNumber: parseTrNumber,
     getCountsFromGroup: getCountsFromGroup

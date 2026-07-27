@@ -6,13 +6,14 @@ A personal-use Chrome extension (Manifest V3, load-unpacked) that speeds up a si
 - **One-key actions** — `l` like, `s` bookmark, `f` follow on the focused tweet
 - **AI assist** — post ideas, reply drafts, and tweet analysis via DeepSeek
 - **Niche filter** — dim / hide tweets by keyword or author, highlight on include matches
+- **Scheduled posts** — message lists handed to X's own scheduler at a random minute inside a window you set, so they go out with the browser closed (opt-in)
 - **Pace guardrail** — non-blocking banner if hourly like / follow limits are exceeded
 
 ## Hard rules (these will never change)
 
-1. **No unattended automation.** Like, follow, reply, and post always require a human keypress or click. The extension only inserts text into the composer; it never clicks the submit button.
+1. **The only automation is the automation you schedule.** Like, follow, reply, and ad-hoc posting always require a human keypress or click; the extension never clicks a submit button on its own — with one deliberate, opt-in exception: posts you plan in the popup's *Gönderi planlama* card are posted at the time you chose, with the exact text you wrote. Nothing else may press that button, and the scheduler is off by default.
 2. **Selector discipline.** Every X query uses `data-testid`, `role`, or `aria-label` only. CSS class names (e.g. `css-1dbjc4n`) are not used — they change weekly.
-3. **No telemetry.** Nothing leaves your machine except calls to `api.deepseek.com` (only the persona + tweet text you explicitly submit).
+3. **No telemetry.** Nothing leaves your machine except calls to `api.deepseek.com` (only the persona + tweet text you explicitly submit) and, if you enable scheduling, calls to `x.com`'s own API carrying posts you wrote.
 4. **Personal use, no Web Store.** This is a load-unpacked extension for one person. Don't publish it.
 
 ## Install (Chrome)
@@ -203,6 +204,48 @@ and clamped back into view if the window is later resized smaller.
   differ from the ones already listed.
 - **Pace meters** for the last 60 minutes, with the limits fetched from the
   background (the popup never loads `config.js`).
+
+### Gönderi planlama (scheduled posts)
+
+Opt-in, off by default. Each *rule* is: a name, a day filter (her gün / hafta
+içi / hafta sonu / one weekday), a time window, an ordering (rastgele or
+sırayla), and a message list — **one message per line**. On each matching day
+the rule takes a **random minute inside the window** and posts one message from
+the list (random pick, or round-robin for `sırayla`).
+
+**The posting is X's, not ours.** Each slot is registered with X's own
+scheduled-posts queue through `CreateScheduledTweet` — the same GraphQL
+mutation x.com's composer fires behind *Gönderiyi planla*. Your session cookies
+authorise it; the extension never reads or stores a credential. Once a slot is
+registered it shows up under **Planlanan gönderiler** (`g` then `t`) and goes
+out whether or not this machine is even switched on.
+
+Mechanics worth knowing:
+
+- Slots are booked **up to 7 days ahead**, so an x.com tab open for one minute
+  today covers the week. The tab is only ever the thing that *registers*
+  a post, never the thing that publishes it.
+- The GraphQL operation id rotates on X's deploys. A 400/404 triggers one
+  rediscovery pass over the bundles the page already loaded, and the fresh id
+  is cached in `xverim_sched_qid_v1` — so a deploy costs one failed attempt,
+  not a broken feature.
+- Registration is attempted **once per rule per day**. A slot whose response
+  was lost stays attempted rather than being retried: a duplicate scheduled
+  post is worse than a missed one.
+- The popup owns the rules (`xverim_schedule_v1`); the content script owns the
+  registration state (`xverim_schedule_state_v1`), keyed `ruleId@YYYY-MM-DD`.
+  Separate keys, so a popup save can't clobber an in-flight registration, and
+  multiple tabs claim a slot before the network call rather than after.
+- A window that has already closed today is skipped to the next matching day,
+  and anything less than 5 minutes out is skipped too (X rejects an
+  `execute_at` that is nearly now).
+- At most 20 outstanding registrations across all rules.
+- Each rule shows its real state in the popup: `3 mesaj · X'e kayıtlı ·
+  sıradaki yarın 08:12 (+4)`, or the error X returned.
+
+This is the one sanctioned exception to hard rule 1 — see above. Note that the
+exception is narrow: the extension asks X to publish text the user wrote at a
+time the user chose. It still never clicks *Gönder* on anything else.
 - Failures report into a status line at the bottom. The popup raises no
   `alert()` dialogs.
 

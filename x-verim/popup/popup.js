@@ -262,10 +262,268 @@
       });
   }
 
+  // ---- Gönderi planlama ----
+  // The popup owns the plan (master switch + rules); the content script owns
+  // the runtime state (what fired today) under a separate key, so a save here
+  // can never clobber an in-flight post over there.
+  var SCHED_RULES_KEY = "xverim_schedule_v1";
+  var SCHED_STATE_KEY = "xverim_schedule_state_v1";
+  var schedPlan = { enabled: false, rules: [] };
+  var schedState = {};
+  var schedSaveTimer = null;
+
+  var SCHED_DAYS = [
+    ["all", "Her gün"], ["wd", "Hafta içi"], ["we", "Hafta sonu"],
+    ["1", "Pazartesi"], ["2", "Salı"], ["3", "Çarşamba"], ["4", "Perşembe"],
+    ["5", "Cuma"], ["6", "Cumartesi"], ["0", "Pazar"]
+  ];
+
+  function schedSaveNow() {
+    var obj = {};
+    obj[SCHED_RULES_KEY] = schedPlan;
+    try { chrome.storage.local.set(obj); } catch (_) {}
+  }
+  // Debounced: every keystroke in a messages box is a change event.
+  function schedSave() {
+    if (schedSaveTimer) clearTimeout(schedSaveTimer);
+    schedSaveTimer = setTimeout(schedSaveNow, 400);
+  }
+
+  var SCHED_TR_DAYS = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+  function schedWhen(ms) {
+    var d = new Date(ms);
+    var hm = (d.getHours() < 10 ? "0" : "") + d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+    var today = new Date();
+    var days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate())
+      - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+    if (days === 0) return "bugün " + hm;
+    if (days === 1) return "yarın " + hm;
+    return SCHED_TR_DAYS[d.getDay()] + " " + hm;
+  }
+  // One line under each rule, so the only proof the plan is live isn't the
+  // tweet showing up days later. Reads the slots actually lodged with X.
+  function schedStatusText(rule) {
+    if (!rule.enabled) return "kapalı";
+    var now = Date.now();
+    var soonest = null, booked = 0, failed = null;
+    for (var k in schedState) {
+      var st = schedState[k];
+      if (!st || st.rule !== rule.id) continue;
+      if (st.error && !failed) failed = st.error;
+      if (!st.ok || st.at <= now) continue;
+      booked++;
+      if (soonest == null || st.at < soonest) soonest = st.at;
+    }
+    if (soonest != null) {
+      return "X'e kayıtlı · sıradaki " + schedWhen(soonest) + (booked > 1 ? " (+" + (booked - 1) + ")" : "");
+    }
+    if (failed) return "kaydedilemedi: " + failed;
+    return "sıraya alınacak";
+  }
+
+  function schedNewRule() {
+    return {
+      id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      enabled: true,
+      label: "",
+      days: "all",
+      start: "09:00",
+      end: "12:00",
+      order: "random",
+      messages: ""
+    };
+  }
+
+  function schedRuleEl(rule) {
+    var wrap = document.createElement("div");
+    wrap.className = "xverim-sched-rule";
+
+    var head = document.createElement("div");
+    head.className = "xverim-sched-row";
+
+    var on = document.createElement("input");
+    on.type = "checkbox";
+    on.checked = !!rule.enabled;
+    on.title = "Bu kural açık / kapalı";
+    on.addEventListener("change", function () {
+      rule.enabled = on.checked;
+      refreshMsgCount();
+      schedSave();
+    });
+
+    var label = document.createElement("input");
+    label.type = "text";
+    label.className = "xverim-sched-label";
+    label.placeholder = "Ad (örn. Günaydın)";
+    label.value = rule.label || "";
+    label.addEventListener("input", function () { rule.label = label.value; schedSave(); });
+
+    var del = document.createElement("button");
+    del.type = "button";
+    del.className = "xverim-btn small";
+    del.textContent = "Sil";
+    del.addEventListener("click", function () {
+      schedPlan.rules = schedPlan.rules.filter(function (r) { return r !== rule; });
+      schedRender();
+      schedSave();
+    });
+
+    head.appendChild(on);
+    head.appendChild(label);
+    head.appendChild(del);
+
+    // Two rows: 380px minus paddings can't fit day + window + order side by
+    // side without crushing the day select into an unreadable sliver.
+    var when = document.createElement("div");
+    when.className = "xverim-sched-row";
+    var when2 = document.createElement("div");
+    when2.className = "xverim-sched-row";
+
+    var days = document.createElement("select");
+    days.className = "xverim-sched-days";
+    for (var i = 0; i < SCHED_DAYS.length; i++) {
+      var opt = document.createElement("option");
+      opt.value = SCHED_DAYS[i][0];
+      opt.textContent = SCHED_DAYS[i][1];
+      days.appendChild(opt);
+    }
+    days.value = rule.days || "all";
+    days.addEventListener("change", function () { rule.days = days.value; schedSave(); });
+
+    var start = document.createElement("input");
+    start.type = "time";
+    start.value = rule.start || "09:00";
+    start.addEventListener("change", function () { rule.start = start.value; schedSave(); });
+
+    var dash = document.createElement("span");
+    dash.className = "xverim-sched-dash";
+    dash.textContent = "–";
+
+    var end = document.createElement("input");
+    end.type = "time";
+    end.value = rule.end || "12:00";
+    end.addEventListener("change", function () { rule.end = end.value; schedSave(); });
+
+    var order = document.createElement("select");
+    order.className = "xverim-sched-order";
+    [["random", "Rastgele"], ["sequential", "Sırayla"]].forEach(function (o) {
+      var opt = document.createElement("option");
+      opt.value = o[0];
+      opt.textContent = o[1];
+      order.appendChild(opt);
+    });
+    order.value = rule.order || "random";
+    order.addEventListener("change", function () { rule.order = order.value; schedSave(); });
+
+    when.appendChild(days);
+    when.appendChild(order);
+    when2.appendChild(start);
+    when2.appendChild(dash);
+    when2.appendChild(end);
+
+    var msgs = document.createElement("textarea");
+    msgs.className = "xverim-sched-msgs";
+    msgs.placeholder = "Her satıra bir mesaj:\nGünaydın\nHayırlı sabahlar";
+    msgs.value = rule.messages || "";
+    msgs.rows = 3;
+    msgs.spellcheck = false;
+    msgs.setAttribute("aria-label", "Mesajlar, her satıra bir tane");
+    // Enter inserts a newline (the separator), so it must not reach the
+    // popup-wide Cmd/Ctrl+Enter generate shortcut or the topic field.
+    msgs.addEventListener("keydown", function (e) { e.stopPropagation(); });
+
+    var count = document.createElement("div");
+    count.className = "xverim-sched-status";
+    function refreshMsgCount() {
+      var n = String(msgs.value || "").split(/[\n|]+/)
+        .map(function (s) { return s.trim(); }).filter(Boolean).length;
+      count.textContent = n ? (n + " mesaj · " + schedStatusText(rule)) : schedStatusText(rule);
+    }
+    msgs.addEventListener("input", function () {
+      rule.messages = msgs.value;
+      refreshMsgCount();
+      schedSave();
+    });
+
+    var status = count;
+    refreshMsgCount();
+
+    wrap.appendChild(head);
+    wrap.appendChild(when);
+    wrap.appendChild(when2);
+    wrap.appendChild(msgs);
+    wrap.appendChild(status);
+    // Lets a live state update repaint just this line, instead of re-rendering
+    // the list out from under someone who is mid-sentence in the textarea.
+    wrap.xvRefresh = refreshMsgCount;
+    return wrap;
+  }
+
+  function schedRender() {
+    var root = $("sched-rules");
+    if (!root) return;
+    root.innerHTML = "";
+    if (!schedPlan.rules.length) {
+      var empty = document.createElement("div");
+      empty.className = "xverim-empty";
+      empty.textContent = "Henüz kural yok. Örnek: Günaydın kuralı, 07:00–10:00.";
+      root.appendChild(empty);
+      return;
+    }
+    for (var i = 0; i < schedPlan.rules.length; i++) {
+      root.appendChild(schedRuleEl(schedPlan.rules[i]));
+    }
+  }
+
+  function schedRefreshStatuses() {
+    var root = $("sched-rules");
+    if (!root) return;
+    for (var i = 0; i < root.children.length; i++) {
+      var el = root.children[i];
+      if (typeof el.xvRefresh === "function") el.xvRefresh();
+    }
+  }
+
+  function loadSchedule() {
+    try {
+      chrome.storage.local.get([SCHED_RULES_KEY, SCHED_STATE_KEY], function (d) {
+        var plan = d && d[SCHED_RULES_KEY];
+        if (plan && typeof plan === "object") {
+          schedPlan.enabled = !!plan.enabled;
+          schedPlan.rules = Array.isArray(plan.rules) ? plan.rules : [];
+        }
+        schedState = (d && d[SCHED_STATE_KEY]) || {};
+        $("sched-enabled").checked = schedPlan.enabled;
+        schedRender();
+      });
+      // The content script updates the state as it plans and posts; mirror it
+      // live so "bugün ~09:41" appears without reopening the popup.
+      chrome.storage.onChanged.addListener(function (changes, area) {
+        if (area !== "local" || !changes[SCHED_STATE_KEY]) return;
+        schedState = changes[SCHED_STATE_KEY].newValue || {};
+        schedRefreshStatuses();
+      });
+    } catch (_) {}
+  }
+
   function init() {
     loadCounts();
     loadFilter();
     loadPrefs();
+    loadSchedule();
+
+    $("sched-enabled").addEventListener("change", function (e) {
+      schedPlan.enabled = !!e.target.checked;
+      schedSaveNow();
+      setStatus(schedPlan.enabled
+        ? "Planlama açık — saati gelince açık x.com sekmesi paylaşır."
+        : "Planlama kapalı.", null, 2600);
+    });
+    $("sched-add").addEventListener("click", function () {
+      schedPlan.rules.push(schedNewRule());
+      schedRender();
+      schedSave();
+    });
 
     $("filter-enabled").addEventListener("change", function (e) {
       var v = !!e.target.checked;
@@ -282,6 +540,15 @@
     // inside an idea card you just finished editing.
     document.addEventListener("keydown", function (e) {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); generate(); }
+    });
+
+    // The popup is torn down the instant it loses focus — flush the debounced
+    // schedule save or the last edit before closing never lands.
+    window.addEventListener("pagehide", function () {
+      if (schedSaveTimer) { clearTimeout(schedSaveTimer); schedSaveTimer = null; schedSaveNow(); }
+    });
+    window.addEventListener("blur", function () {
+      if (schedSaveTimer) { clearTimeout(schedSaveTimer); schedSaveTimer = null; schedSaveNow(); }
     });
   }
 
