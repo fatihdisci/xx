@@ -1,378 +1,483 @@
-# X Verim — Personal Accelerator for X
+# X Verim
 
-A personal-use Chrome extension (Manifest V3, load-unpacked) that speeds up a single human's X workflow with:
+X'te tek bir kişinin işini hızlandıran kişisel bir tarayıcı eklentisi. Chrome ve
+Safari'de çalışır, Web Store'a çıkmaz, sadece senin makinende durur.
 
-- **Keyboard navigation** — `j` / `k` for vim-style focus on the timeline
-- **One-key actions** — `l` like, `s` bookmark, `f` follow on the focused tweet
-- **AI assist** — post ideas, reply drafts, and tweet analysis via DeepSeek
-- **Niche filter** — dim / hide tweets by keyword or author, highlight on include matches
-- **Scheduled posts** — message lists handed to X's own scheduler at a random minute inside a window you set, so they go out with the browser closed (opt-in)
-- **Pace guardrail** — non-blocking banner if hourly like / follow limits are exceeded
+Ne yapar, kısaca:
 
-## Hard rules (these will never change)
+- **Klavyeyle gezinme** — `j` / `k` ile tweetler arasında, fareye dokunmadan
+- **Tek tuşla işlem** — `l` beğen, `s` yer işareti, `f` takip et
+- **AI yardımı** — gönderi fikirleri, yanıt taslakları (DeepSeek üzerinden)
+- **Niş filtresi** — akışta ilgilenmediğin tweetleri soluklaştırır, ilgilendiklerini işaretler
+- **Gönderi planlama** — yazdığın mesajları X'in kendi planlayıcısına kaydeder, bilgisayar kapalıyken bile paylaşılır
+- **Hız korkuluğu** — saatlik beğeni/takip hızın fazla artarsa uyarır
 
-1. **The only automation is the automation you schedule.** Like, follow, reply, and ad-hoc posting always require a human keypress or click; the extension never clicks a submit button on its own — with one deliberate, opt-in exception: posts you plan in the popup's *Gönderi planlama* card are posted at the time you chose, with the exact text you wrote. Nothing else may press that button, and the scheduler is off by default.
-2. **Selector discipline.** Every X query uses `data-testid`, `role`, or `aria-label` only. CSS class names (e.g. `css-1dbjc4n`) are not used — they change weekly.
-3. **No telemetry.** Nothing leaves your machine except calls to `api.deepseek.com` (only the persona + tweet text you explicitly submit) and, if you enable scheduling, calls to `x.com`'s own API carrying posts you wrote.
-4. **Personal use, no Web Store.** This is a load-unpacked extension for one person. Don't publish it.
+---
 
-## Install (Chrome)
+## Değişmeyecek dört kural
 
-1. Copy `config.example.js` to `config.js` and fill in:
-   - `DEEPSEEK_API_KEY`
-   - `PERSONA.identity` / `niche` / `tone`, and — the biggest quality lever —
-     `PERSONA.samples`, a handful of tweets you actually wrote. The model copies
-     their rhythm, never their content.
-   - Optional: `FILTER.keywordsInclude` / `keywordsExclude` / `mutedAuthors` / `highlightMinLikes`
-   - Optional: `AI_TIMEOUT_MS` (default 45 s) so a stalled request gives up instead of hanging.
-2. Open `chrome://extensions`, turn on **Developer mode** (top right).
-3. Click **Load unpacked** and select the `x-verim/` folder.
-4. Open `https://x.com` and the panel hotkey is `v`.
+**1. Tek otomasyon, senin kurduğun otomasyon.** Beğenme, takip, yanıt ve anlık
+gönderi her zaman senin tuşuna basmanı ister; eklenti kendi kafasına göre
+"Gönder" düğmesine basmaz. Tek istisna var ve bilerek konuldu: popup'taki
+*Gönderi planlama* kartına yazdığın gönderiler, senin seçtiğin saatte, senin
+yazdığın metinle paylaşılır. Bunun dışında hiçbir şey o düğmeye dokunamaz ve
+planlama varsayılan olarak **kapalıdır**.
 
-`config.js` is in `.gitignore` — your key never leaves the machine. Without it
-the extension will not load at all, which is why the example file is committed.
+**2. Seçici disiplini.** X'in sayfasındaki her öğe `data-testid`, `role` veya
+`aria-label` ile bulunur. CSS sınıf adları (`css-1dbjc4n` gibi) kullanılmaz,
+çünkü onlar her hafta değişir.
 
-Any action missing from `SHORTCUTS` falls back to the default key in the table
-below; setting one to `""` still disables it.
+**3. Telemetri yok.** Makinenden dışarı sadece şunlar çıkar: `api.deepseek.com`'a
+gönderdiğin tweet metni ve kişilik tanımın, bir de planlamayı açtıysan `x.com`'un
+kendi API'sine senin yazdığın gönderiler. Başka hiçbir yere hiçbir şey gitmez.
 
-## Install (Safari, macOS)
+**4. Kişisel kullanım.** Bu tek kişilik bir eklenti. Yayınlama.
 
-Safari has no "load unpacked" — an extension must live inside a macOS app bundle.
-The Xcode project in `../x-verim-safari/` wraps this folder. It **references** these
-files rather than copying them, so editing `content.js` / `config.js` here and
-rebuilding is all it takes; there is no second copy to keep in sync.
+---
 
-```sh
-cd "../x-verim-safari/X Verim"
-xcodebuild -project "X Verim.xcodeproj" -scheme "X Verim" \
-  -configuration Debug -derivedDataPath ./build \
-  -allowProvisioningUpdates DEVELOPMENT_TEAM=<your-team-id> build
-cp -R "build/Build/Products/Debug/X Verim.app" ..
-open "../X Verim.app"     # run once so Safari registers the extension
-```
+## Kurulum
 
-Then, in Safari:
+### Chrome
 
-1. **Settings → Advanced →** check *Show features for web developers*.
-2. **Develop → Allow Unsigned Extensions.** Required because the app is signed
-   with an Apple Development certificate, not a Developer ID. **This resets every
-   time Safari quits** — re-enable it after a restart. (Signing with a Developer ID
-   certificate removes this step, but that needs a paid Apple Developer account.)
-3. **Settings → Extensions →** enable **X Verim**.
-4. Click the toolbar icon → **Always Allow on x.com**. Safari gates host access per
-   site at runtime; without this the content script never injects and the keyboard
-   shortcuts do nothing.
+1. `config.example.js` dosyasını `config.js` olarak kopyala ve doldur:
+   - `DEEPSEEK_API_KEY` — DeepSeek API anahtarın
+   - `PERSONA.identity` / `niche` / `tone` — kim olduğun, ne hakkında yazdığın, nasıl konuştuğun
+   - `PERSONA.samples` — **kalitede en büyük fark burada.** Gerçekten yazdığın
+     birkaç tweet. Model bunların ritmini kopyalar, içeriğini asla.
+   - İsteğe bağlı: `FILTER` ayarları, `AI_TIMEOUT_MS` (varsayılan 45 sn)
+2. `chrome://extensions` aç, sağ üstten **Developer mode**'u aç.
+3. **Load unpacked** de ve `x-verim/` klasörünü seç.
+4. `https://x.com` aç. Panel kısayolu `v`.
 
-### Reloading after an edit
+`config.js` gitignore'da, yani anahtarın hiçbir zaman repoya girmez. Bu dosya
+olmadan eklenti hiç yüklenmez, örnek dosyanın commit'lenmiş olmasının sebebi bu.
 
-Chrome has a reload button; Safari does not. The built `.appex` contains copies of
-the extension files made at build time, so edits under `x-verim/` only take effect
-after a rebuild:
+### Safari (macOS)
+
+Safari'de "load unpacked" yok, eklentinin bir macOS uygulamasının içinde yaşaması
+gerekiyor. `../x-verim-safari/` klasöründeki Xcode projesi bu klasörü sarmalıyor.
+Dosyaları **kopyalamıyor, referans veriyor** — yani buradaki `content.js`'i
+düzenleyip yeniden derlemen yeterli, senkronda tutulacak ikinci bir kopya yok.
 
 ```sh
 ../x-verim-safari/rebuild.sh
 ```
 
-Then quit and reopen Safari (or toggle X Verim off/on in Settings → Extensions),
-re-enable **Develop → Allow Unsigned Extensions**, and reload the x.com tab.
+Sonra Safari'de:
 
-To debug the background code, use **Develop → Web Extension Background Content**;
-content scripts show up in the normal Web Inspector for the x.com tab.
+1. **Ayarlar → Gelişmiş →** *Web geliştiricileri için özellikleri göster*'i işaretle.
+2. **Develop → Allow Unsigned Extensions.** Uygulama Developer ID ile değil
+   geliştirme sertifikasıyla imzalandığı için gerekli. **Safari her kapanışta bunu
+   sıfırlıyor**, yeniden açtığında tekrar işaretle.
+3. **Ayarlar → Eklentiler →** X Verim'i etkinleştir.
+4. Araç çubuğundaki simgeye tıkla → **x.com'da Her Zaman İzin Ver**. Safari site
+   erişimini çalışma anında soruyor; bunu vermezsen içerik betiği hiç enjekte
+   olmaz ve kısayollar çalışmaz.
 
-To regenerate the project from scratch (only needed if `manifest.json` gains new keys):
+**Düzenleme sonrası:** Chrome'da yenile düğmesi var, Safari'de yok. Derlenmiş
+`.appex` dosyanın içinde derleme anındaki kopyalar var, bu yüzden `x-verim/`
+altındaki değişiklikler ancak yeniden derleyince geçerli olur. `rebuild.sh`'ı
+çalıştır, Safari'yi kapatıp aç, *Allow Unsigned Extensions*'ı tekrar işaretle,
+x.com sekmesini yenile.
 
-```sh
-xcrun safari-web-extension-converter --project-location ../x-verim-safari \
-  --app-name "X Verim" --bundle-identifier com.fatihdisci.xverim \
-  --macos-only --swift --no-open --no-prompt --force .
-```
+Arka plan kodunu ayıklamak için **Develop → Web Extension Background Content**;
+içerik betikleri x.com sekmesinin normal Web Inspector'ında görünür.
 
-Note the converter gives the app and the extension mismatched bundle identifiers
-(`…X-Verim` vs `…xverim.Extension`), which fails `ValidateEmbeddedBinary`. Fix by
-setting the app target's `PRODUCT_BUNDLE_IDENTIFIER` to `com.fatihdisci.xverim` so
-the extension's id is prefixed by it.
+**Tek kod tabanı iki tarayıcıya nasıl hizmet ediyor:** `manifest.json` arka planı
+iki kez tanımlıyor. Chrome `service_worker`'ı kullanıp `scripts`'i yok sayıyor,
+Safari tam tersini yapıp bir event page çalıştırıyor. `importScripts` sadece
+service worker'da var olduğu için `background.js` onu kontrol ediyor — Safari'de
+`config.js` zaten `scripts` dizisiyle yüklenmiş oluyor.
 
-### How one codebase serves both browsers
+---
 
-`manifest.json` declares the background twice:
+## Klavye kısayolları
 
-```json
-"background": {
-  "service_worker": "background.js",
-  "scripts": ["config.js", "background.js"]
-}
-```
+Hepsi `config.js` içindeki `SHORTCUTS` bölümünden değiştirilebilir. Bir tuşu `""`
+yaparsan o işlem tamamen kapanır.
 
-Chrome uses `service_worker` and ignores `scripts`; Safari prefers `scripts` and runs
-an event page. Because `importScripts` only exists in a service worker, `background.js`
-guards it — under Safari `config.js` is already loaded by the `scripts` array.
-
-## Usage
-
-### Keyboard shortcuts (focused tweet, defaults — editable in `config.js`)
-
-| Key | Action |
+| Tuş | Ne yapar |
 | --- | --- |
-| `j` | Focus next tweet |
-| `k` | Focus previous tweet |
-| `l` | Like / unlike the focused tweet |
-| `s` | Bookmark |
-| `f` | Follow the author (if not already following) |
-| `r` | Open reply composer and insert an AI draft |
-| `a` | Show the drafts card: ready reply drafts (each with a Turkish translation) you can drop straight into the composer |
-| `v` | Toggle the floating panel |
-| `1`…`5` | While the drafts card is open: put that draft into the reply box |
-| `Esc` | Close the drafts card, then the panel |
+| `j` | Sonraki tweete geç |
+| `k` | Önceki tweete geç |
+| `l` | Beğen / beğeniyi geri al |
+| `s` | Yer işaretine ekle |
+| `f` | Yazarı takip et |
+| `r` | Yanıt kutusunu aç ve AI taslağını içine koy |
+| `a` | Taslak kartını aç: hazır yanıt taslakları, her birinin Türkçe çevirisiyle |
+| `v` | Yüzen paneli aç/kapat |
+| `1`…`5` | Kart açıkken: o taslağı yanıt kutusuna koy |
+| `Esc` | Önce kartı, sonra paneli kapat |
 
-Shortcuts are ignored while you're typing in an `input`, `textarea`, or any
-`contenteditable` region — including the editable draft fields in the card.
+Bir `input`, `textarea` veya yazılabilir alanda yazarken kısayollar devre dışı —
+karttaki düzenlenebilir taslak kutuları da buna dahil.
 
-### The active tweet
+---
 
-Every one-key action applies to exactly one tweet, so which one that is has to
-be obvious and never surprising:
+## Aktif tweet nasıl seçiliyor
 
-- **Scrolling** picks the tweet crossing a reading line at 35% of the viewport
-  height, with hysteresis around it so two neighbours can't flip-flop.
-- **`j` / `k` and clicking** are deliberate picks: they stay put while any real
-  part of that tweet is still on screen, and hand control back to the reading
-  line the moment you scroll — wheel, trackpad, or `Space` / `PageDown` /
-  arrows. `j` / `k` land the tweet straddling the same line they're measured
-  against, so a jump can never lose the highlight as the scroll settles.
-- The marker is deliberately quiet: the row lifts by a 6% tint, a 3px accent bar
-  marks its left edge, and a small chip names the analyse key. **No border** —
-  X doesn't draw timeline rows as cards, and framing one made the extension look
-  like it had taken the page over.
-- The bar and chip are drawn by a **floating overlay**, not by styles inside X's
-  own markup: they can't be faded by the niche filter, can't be clipped by the
-  row, and can't fight X's hover backgrounds. The bar is centred on the part of
-  the row you can actually see, between X's sticky header and the fold, so a
-  tweet taller than the window still shows its marker. That header's height is
-  measured, not assumed, because the home timeline's tab bar makes it taller
-  than other views.
-- The whole marker is hidden while a reply or compose dialog is open, and the
-  tweet X copies into that dialog is never focusable.
-- The keyword-highlight bar is **green and 2px**, against the active bar's blue
-  and 3px. Both used to be 3px blue at the same left edge, so on a row that was
-  both they sat exactly on top of each other and neither could be read.
-- A **dimmed** tweet stays interactive and comes back to 90% when you point at
-  it. It used to carry `pointer-events: none`, which meant a dimmed tweet could
-  not be opened, its links could not be clicked, and it could not be selected —
-  fading something out is not the same as taking it away. `hide` remains the
-  hard treatment.
+Her tek tuşluk işlem tam olarak bir tweete uygulanıyor, dolayısıyla hangisi
+olduğunun net olması ve seni asla şaşırtmaması gerekiyor.
 
-`window.__xverim.applyFocus()` steps the pass by hand in the inspector, and
-`window.__xverim.articles()` returns the rows it considers.
+**Kaydırırken**, ekranın %35 yüksekliğindeki hayali bir "okuma çizgisini" kesen
+tweet seçiliyor. Çizginin etrafında bir tolerans bandı var, böylece iki komşu
+tweet sınırda gidip gelemiyor.
 
-### Drafts card (`a`)
+**`j` / `k` veya tıklama** bilinçli bir seçim sayılıyor: o tweetin gerçek bir
+parçası ekranda kaldığı sürece seçim orada duruyor, sen kaydırdığın anda (tekerlek,
+trackpad, `Space` / `PageDown` / ok tuşları) kontrol okuma çizgisine geri geçiyor.
+`j` / `k` tweeti tam da ölçüldüğü çizginin üstüne oturtuyor, böylece bir sıçrama
+kaydırma yerine oturduğunda vurguyu kaybedemiyor.
 
-- The source tweet's handle and first line sit above the drafts — with several
-  cards opened in a session, it stops being obvious which tweet you're answering.
-- Each draft is **editable in place**, with a live character count (yellow past
-  240, red past 280). `Yanıtla`, `Kopyala` and the number keys all use whatever
-  is in the field at that moment.
-- `Cmd`/`Ctrl` + `Enter` inside a draft sends it to the reply box. `Esc` steps
-  out of the field first, so a stray Esc never throws away an edit.
-- ↻ regenerates. It sends the drafts already on screen back to the model as
-  "don't repeat these", so a re-run means *different angles*, not a reword.
-- On a tweet's **detail page**, the replies already visible under it (up to 10,
-  stopping before X's "Discover more" block) are sent along as context: drafts
-  skip the points the thread already made and match its register. The card's
-  label shows `· N yanıt okundu` when this happened. The home timeline never
-  does this — there are no replies on screen to read.
-- Errors and empty results get a `Tekrar dene` button instead of a dead card.
+**İşaretleme bilerek sessiz:** satır %6'lık bir maviye boyanıyor, sol kenarına
+3px'lik bir çubuk çiziliyor ve küçük bir etiket hangi tuşun taslak ürettiğini
+söylüyor. **Çerçeve yok** — X zaman tünelindeki satırları kart gibi çizmiyor,
+birini çerçevelemek eklentinin sayfayı ele geçirmiş gibi görünmesine yol açıyordu.
 
-### Floating panel (toggle with `v`)
+Çubuk ve etiket X'in kendi HTML'inin içine değil, **yüzen bir katmana** çiziliyor.
+Böylece niş filtresi tarafından soluklaştırılamıyor, satır tarafından kırpılamıyor
+ve X'in hover renkleriyle kavga edemiyor. Çubuk satırın gerçekten görebildiğin
+kısmına ortalanıyor, yani ekrandan uzun bir tweet bile işaretini gösteriyor. X'in
+üstteki yapışkan başlığının yüksekliği tahmin edilmiyor, ölçülüyor — anasayfadaki
+sekme çubuğu onu diğer sayfalardan daha uzun yapıyor.
 
-- Filter on / off (live — syncs with the popup)
-- 60-min rolling pace meters for likes and follows, each against its
-  `GUARDRAILS` limit (yellow at 75%, red at the limit)
-- A collapsible shortcut cheat sheet, generated from the live `SHORTCUTS` — a
-  custom key can never disagree with what it shows
+Yanıt veya gönderi penceresi açıkken işaretin tamamı gizleniyor, X'in o pencerenin
+içine kopyaladığı tweet hiçbir zaman seçilemiyor.
 
-Drag the header to reposition. Position is persisted in `chrome.storage.local`,
-and clamped back into view if the window is later resized smaller.
+Anahtar kelime vurgusu **yeşil ve 2px**, aktif tweet çubuğu **mavi ve 3px**. Eskiden
+ikisi de aynı yerde 3px maviydi; hem vurgulu hem aktif olan bir satırda tam üst
+üste biniyorlardı ve ikisi de okunmuyordu.
 
-### Popup (toolbar icon)
+**Soluklaştırılmış** bir tweet hâlâ tıklanabilir ve üzerine gelince %90'a dönüyor.
+Eskiden `pointer-events: none` taşıyordu, yani soluk bir tweet açılamıyor,
+linklerine tıklanamıyor, seçilemiyordu — bir şeyi soluklaştırmak onu ortadan
+kaldırmakla aynı şey değil. `hide` modu sert muamele olarak duruyor.
 
-- **Niş filtresi** — reflects content-script state, syncs both ways
-- **Gönderi fikirleri** — topic (optional), how many, and an *angle* (karışık /
-  görüş / ders / soru / an / gözlem). Each result is an **editable** card with a
-  live character count against X's 280 limit, plus `Kopyala` and `Kutuya koy`.
-  Topic, count and angle persist between openings; Enter in the topic field or
-  `Cmd`/`Ctrl` + `Enter` anywhere generates, and a re-run asks for ideas that
-  differ from the ones already listed.
-- **Pace meters** for the last 60 minutes, with the limits fetched from the
-  background (the popup never loads `config.js`).
+Konsoldan `window.__xverim.applyFocus()` ile bu geçişi elle adımlayabilir,
+`window.__xverim.articles()` ile hangi satırları değerlendirdiğini görebilirsin.
 
-### Gönderi planlama (scheduled posts)
+---
 
-Opt-in, off by default. Each *rule* is: a name, a day filter (her gün / hafta
-içi / hafta sonu / one weekday), a time window, an ordering (rastgele or
-sırayla), and a message list — **one message per line**. On each matching day
-the rule takes a **random minute inside the window** and posts one message from
-the list (random pick, or round-robin for `sırayla`).
+## Yanıt taslakları
 
-**The posting is X's, not ours.** Each slot is registered with X's own
-scheduled-posts queue through `CreateScheduledTweet` — the same GraphQL
-mutation x.com's composer fires behind *Gönderiyi planla*. Your session cookies
-authorise it; the extension never reads or stores a credential. Once a slot is
-registered it shows up under **Planlanan gönderiler** (`g` then `t`) and goes
-out whether or not this machine is even switched on.
+### `a` — taslak kartı
 
-Mechanics worth knowing:
+Bir tweete odaklanıp `a`'ya bastığında sağ tarafta küçük bir kart açılıyor ve
+içinde hazır yanıt taslakları oluyor.
 
-- Slots are booked **up to 7 days ahead**, so an x.com tab open for one minute
-  today covers the week. The tab is only ever the thing that *registers*
-  a post, never the thing that publishes it.
-- The GraphQL operation id rotates on X's deploys. A 400/404 triggers one
-  rediscovery pass over the bundles the page already loaded, and the fresh id
-  is cached in `xverim_sched_qid_v1` — so a deploy costs one failed attempt,
-  not a broken feature.
-- Registration is attempted **once per rule per day**. A slot whose response
-  was lost stays attempted rather than being retried: a duplicate scheduled
-  post is worse than a missed one.
-- The popup owns the rules (`xverim_schedule_v1`); the content script owns the
-  registration state (`xverim_schedule_state_v1`), keyed `ruleId@YYYY-MM-DD`.
-  Separate keys, so a popup save can't clobber an in-flight registration, and
-  multiple tabs claim a slot before the network call rather than after.
-- A window that has already closed today is skipped to the next matching day,
-  and anything less than 5 minutes out is skipped too (X rejects an
-  `execute_at` that is nearly now).
-- At most 40 outstanding registrations, at most 4 per pass, spaced ~1 s apart.
-- Each rule shows its real state in the popup: `3 mesaj · X'e kayıtlı ·
-  sıradaki yarın 08:12 (+4)`, or the error X returned.
-- **İçe / dışa aktar** takes the rule list as JSON, because typing fifty lines
-  through a 380px popup is not a thing anyone should do. Import replaces the
-  whole list and asks first. Keep your own rules in a `planlama-*.json` beside
-  the extension — that pattern is gitignored, since content that is supposed
-  to read as unplanned has no business in a public repo.
+- Üstte kaynak tweetin kullanıcı adı ve ilk satırı duruyor. Bir oturumda birkaç
+  kart açınca hangisine cevap yazdığın belirsizleşiyordu.
+- Her taslak **yerinde düzenlenebilir**, canlı karakter sayacı var (240'ı geçince
+  sarı, 280'i geçince kırmızı). `Yanıtla`, `Kopyala` ve rakam tuşları hepsi o anda
+  kutuda ne yazıyorsa onu kullanıyor.
+- Taslağın içindeyken `Cmd`/`Ctrl` + `Enter` onu yanıt kutusuna gönderiyor. `Esc`
+  önce kutudan çıkıyor, böylece yanlışlıkla basılan bir Esc düzenlemeni çöpe atmıyor.
+- ↻ yeniden üretiyor. Ekrandaki taslakları modele "bunları tekrarlama" diye geri
+  gönderiyor, yani yeniden üretim *farklı açılar* demek, aynı cümlenin yeniden
+  yazımı değil.
+- **Tweet detay sayfasındayken**, tweetin altında görünen yanıtlar (en fazla 10
+  tane, X'in "Daha fazlasını keşfet" bloğundan önce durarak) modele bağlam olarak
+  gidiyor. Taslaklar thread'de zaten söylenmiş şeyleri tekrarlamıyor ve ortamın
+  tonuna uyuyor. Bu olduğunda kartın etiketi `· N yanıt okundu` diyor. Anasayfada
+  bu olmuyor, çünkü orada okunacak yanıt yok.
+- Hata veya boş sonuç durumunda ölü bir kart yerine `Tekrar dene` düğmesi çıkıyor.
 
-#### Not looking automated
+### `r` — doğrudan yanıt kutusuna
 
-Timing alone doesn't hide a schedule. Three things do, and all three are on by
-default:
+Yanıt penceresini açıyor ve tek bir taslağı içine koyuyor. Göndermeye yine sen
+karar veriyorsun.
 
-- **No repeats until the list is exhausted.** `Tekrarsız` (the default) draws
-  without replacement and reshuffles only when the bag is empty, never handing
-  back the line it just used. Pure random posts one greeting twice in a week
-  while another never appears, which reads worse than an obvious rotation.
-- **Missed days.** `%15/%25/%40 atla` sits out that share of otherwise-matching
-  days. An unbroken 60-day streak is the loudest tell there is; nothing else
-  about the posts matters if they never miss.
-- **No round minutes.** A uniform draw lands on `:00` and `:30` often enough
-  that, over a month, those are the only ones anyone would notice — so a
-  quarter-hour hit gets nudged a few minutes off, and the seconds are random
-  too. Every post landing at exactly `:00` seconds is a fingerprint with no
-  innocent explanation.
+### Taslakların sesi nereden geliyor
 
-Content still has to carry its own weight, and the rule is stricter than
-"evergreen": **a scheduled line must not claim anything happened.** These are
-written now and posted on an unknown future day, so "shipped it today" or
-"started four things this week" isn't merely stale when it lands, it's false —
-and a feed of progress reports that never match reality is both a lie and the
-easiest kind of automation to spot. Greetings, wishes and moods are safe
-because they're true whenever they land. Keep the shapes varied (two words up
-to a short sentence) so ten of them don't read as one template.
+`background.js` içindeki `buildSystemPrompt()` bir taslağın sesinin belirlendiği
+tek yer ve iki modu var: `compose` (senin nişlerin konunun kendisi) ve `respond`
+(kaynak tweet konu, nişler sadece üsluba renk katıyor).
 
-This is the one sanctioned exception to hard rule 1 — see above. Note that the
-exception is narrow: the extension asks X to publish text the user wrote at a
-time the user chose. It still never clicks *Gönder* on anything else.
-- Failures report into a status line at the bottom. The popup raises no
-  `alert()` dialogs.
+Ses kuralları sıfat yerine somut yasaklar olarak yazılmış, çünkü "doğal ol" hiçbir
+şeyi değiştirmezken "uzun tire kullanma" değiştiriyor. Ortak liste bir metni ilk
+bakışta makine yapımı gösteren kalıpları eliyor — "X değil, Y", üç maddelik
+listeler, retorik soruyla açılış — ve bir partideki üç taslağın üç aynı cümle
+olarak gelmemesi için uzunluk çeşitliliği istiyor.
 
-Reply drafting is not in the popup — it lives on the timeline, where the tweet
-already is: focus one and press `a` (three ready-to-post drafts) or `r`
-(draft straight into the reply box).
+`respond` modunda ayrıca özetlemek yerine tepki vermesi söyleniyor: tweeti geri
+tekrarlama, iltifatla açma, tweetin tonuna ve uzunluğuna uy, dört kelimelik bir
+yanıt gerçek bir yanıttır. `config.js`'teki `PERSONA.samples` üslup çıpası olarak
+yapıştırılıyor — çıktının sana ne kadar benzeyeceği üzerindeki en güçlü kol bu.
 
-### Feedback
+Her isteme bugünün gerçek tarihi de yazılıyor. Bir modelin "şimdi" algısı eğitim
+kesim tarihi olduğu için taslaklar sessizce daha eski bir yılı varsayıp kendilerini
+2024'e tarihliyordu. Tarih satırı her istekte yerel tarih parçalarından kuruluyor
+(`toISOString()` UTC olduğu için akşam saatlerinde bize dünü söylerdi), böylece
+gece boyu açık kalan bir sekme dünün tarihini taşımıyor.
 
-Anything that used to fail into the console now shows a small toast in the
-bottom-right corner: a draft on its way to the composer, an API error, a key
-pressed with no tweet focused. If a draft can't reach the composer it is copied
-to the clipboard instead, and the toast says so — a generated draft is never
-silently lost.
+---
 
-The persona is **never displayed** in any surface. It travels from `config.js` into
-the system prompt and nowhere else; the background exposes no message that returns it.
+## Niş filtresi
 
-`Kutuya koy` clicks the side **New Tweet** button on the current x.com tab, waits for the composer to mount, and inserts the text. You still press the Post button yourself.
+`config.js` içindeki `FILTER` bölümüne göre akıştaki tweetleri işaretliyor:
 
-## How the drafts get their voice
+- `keywordsInclude` — bu kelimeleri içeren tweetler yeşil çubukla **vurgulanıyor**
+- `keywordsExclude` — bu kelimeleri içerenler **soluklaştırılıyor** (`hideMode: "dim"`)
+  veya tamamen **gizleniyor** (`hideMode: "hide"`)
+- `mutedAuthors` — bu kullanıcı adları gizleniyor
+- `highlightMinLikes` — beğenisi bu sayının üstündekiler vurgulanıyor
 
-`buildSystemPrompt()` in `background.js` is the only place a draft's voice is
-decided, and it has two modes: `compose` (your niches *are* the subject) and
-`respond` (the source tweet is the subject, the niches only colour the voice).
+Filtre panelden ve popup'tan canlı açılıp kapatılıyor, iki taraf birbiriyle
+senkron. Türkçe'ye özel bir ayrıntı: küçük harfe çevirirken `tr-TR` kullanılıyor,
+çünkü düz `toLowerCase()` "İ" harfini bozuyor ve "İçtihat" ile "içtihat"
+eşleşmiyordu.
 
-The voice rules are written as concrete bans rather than adjectives, because
-"be natural" changes nothing while "no em dashes" does. The shared list
-(`HUMAN_VOICE`) rules out the constructions that identify a text as machine-written
-on sight — `not X, but Y`, three-item lists, "here's the thing", a rhetorical
-question as an opener — plus the usual buzzword set, and it asks for varied
-lengths so a batch of three doesn't arrive as three identical sentences.
+---
 
-On top of that, `respond` mode is told to react rather than summarise: no
-repeating the tweet back, no compliment openers, match the tweet's register and
-length, and a four-word reply is a real reply. `PERSONA.samples` from `config.js`
-are pasted in as style anchors — that is the single strongest lever on how much
-the output sounds like you.
+## Yüzen panel (`v`)
 
-Every prompt also states today's real date. A model's sense of "now" is its
-training cutoff, so drafts quietly assumed an earlier year and dated themselves
-to 2024 or 2025. The line is built per request from local date parts (not
-`toISOString()`, which is UTC and names yesterday for anyone east of Greenwich
-late in the evening), so a tab left open overnight doesn't keep yesterday's date.
+- Filtre açma/kapama (canlı, popup ile senkron)
+- Son 60 dakikanın beğeni ve takip hız göstergeleri, `GUARDRAILS` sınırlarına
+  karşı (%75'te sarı, sınırda kırmızı)
+- Katlanabilir kısayol listesi — canlı `SHORTCUTS`'tan üretiliyor, yani özel bir
+  tuş asla listedekiyle çelişemiyor
 
-## Why the JS files start with a BOM
+Başlığından tutup sürükleyebilirsin. Konum `chrome.storage.local`'da saklanıyor
+ve pencere sonradan küçültülürse görünür alana geri çekiliyor.
 
-Safari decodes background scripts as Latin-1 when nothing declares a charset, which
-turned `başına` into `baÅŸÄ±na` — visibly in the UI, and invisibly in the system
-prompt and in the Turkish engagement-token table in `lib/x-dom.js` (where a mangled
-`beğeni` silently parses every like count as 0). Every `.js` file therefore starts
-with a UTF-8 BOM, which forces UTF-8 in both browsers and is treated as whitespace
-by JS. Keep it when editing: save as "UTF-8 with BOM". `content.css` avoids the
-problem differently, by writing its one non-ASCII glyph as the escape `\2022`.
+---
 
-## If X changes its UI
+## Popup (araç çubuğu simgesi)
 
-All selectors live in **`lib/x-dom.js`** in the `SELECTORS` object at the top. Open DevTools on x.com, find the new `data-testid` for the affected element, update the matching entry, and reload the extension.
+**Niş filtresi** — içerik betiğiyle çift yönlü senkron.
 
-The DOM helper functions in the same file (`getTweetArticle`, `getTweetText`, `getAuthorHandle`, `getLikeButton`, `getCountsFromGroup`, …) are the single source of truth for how the extension talks to X.
+**Gönderi fikirleri** — konu (isteğe bağlı), kaç tane, ve bir *açı* (karışık /
+görüş / ders / soru / an / gözlem). Her sonuç **düzenlenebilir** bir kart, 280
+karakter sayacıyla, yanında `Kopyala` ve `Kutuya koy`. Konu, adet ve açı popup
+kapanınca kayboluyor değil, saklanıyor. Konu kutusunda `Enter` ya da herhangi bir
+yerde `Cmd`/`Ctrl` + `Enter` üretiyor, yeniden üretim listedekilerden farklı
+fikirler istiyor.
 
-## Files
+`Kutuya koy` açık x.com sekmesindeki **Gönderi yayınla** düğmesine tıklıyor,
+kutunun yüklenmesini bekliyor ve metni içine koyuyor. Gönder düğmesine yine sen
+basıyorsun.
+
+**Hız göstergeleri** — son 60 dakika, sınırlar arka plandan geliyor (popup
+`config.js`'i hiç yüklemiyor).
+
+Yanıt taslakları popup'ta yok; tweetin zaten durduğu yerde, zaman tünelinde
+yaşıyorlar.
+
+---
+
+## Gönderi planlama
+
+Varsayılan olarak kapalı, açıkça açman gerekiyor.
+
+### Bir kural nelerden oluşuyor
+
+| Alan | Ne işe yarıyor |
+| --- | --- |
+| Ad | Sadece senin için etiket ("Sabah", "Cuma") |
+| Gün | Her gün / hafta içi / hafta sonu / tek bir gün |
+| Saat aralığı | Gönderinin düşeceği pencere, örneğin 07:20–09:50 |
+| Sıra | Tekrarsız / Rastgele / Sırayla |
+| Atlama | Günlerin yüzde kaçının sessizce atlanacağı |
+| Mesajlar | **Her satıra bir mesaj** |
+
+### Bilgisayar kapalıyken nasıl paylaşılıyor
+
+Paylaşımı eklenti yapmıyor, **X yapıyor.** Her slot, x.com'un kendi gönderi
+kutusundaki *Gönderiyi planla* düğmesinin arkasındaki `CreateScheduledTweet`
+çağrısıyla X'in kendi planlanan gönderiler kuyruğuna kaydediliyor. Yetkiyi senin
+oturum çerezin veriyor; eklenti hiçbir kimlik bilgini okumuyor ya da saklamıyor.
+
+Bir slot kaydolduktan sonra X'te **Planlanan gönderiler** sayfasında görünüyor
+(`g` sonra `t`) ve bu makine kapalı olsa bile paylaşılıyor.
+
+**Tek şart:** slotların kaydolması için ara sıra bir x.com sekmesinin açık olması
+gerekiyor. Slotlar **7 gün ileriye kadar** ayrılıyor, yani bugün birkaç dakika
+açık kalan bir sekme haftanın tamamını kuruyor. Sekme sadece *kaydeden* şey,
+hiçbir zaman *paylaşan* şey değil.
+
+### Sahte görünmemek için üç mekanizma
+
+Bir planlamayı ele veren şey saat değil. Üç şey ele veriyor ve üçü de varsayılan
+olarak açık:
+
+**Liste bitmeden tekrar yok.** `Tekrarsız` (varsayılan) bir torbadan çekiliyor:
+bütün mesajlar kullanılmadan hiçbiri tekrar etmiyor, torba yenilendiğinde de en
+son kullanılan satır başa gelemiyor. Saf rastgelede bir selamlama bir haftada iki
+kez çıkarken başka biri hiç çıkmıyor, bu bariz bir dönüşümden daha kötü duruyor.
+
+**Atlanan günler.** `%15 / %25 / %40 atla` uygun günlerin o kadarını sessizce
+atlıyor. Aralıksız 60 günlük bir seri en yüksek sesli ipucu; gönderiler hiç
+aksamıyorsa geri kalan hiçbir detayın önemi kalmıyor.
+
+**Yuvarlak dakika yok.** Düz bir rastgele seçim `:00` ve `:30`'a bir ay içinde
+gözle görülür sıklıkta düşüyor ve insanların fark edeceği tek şey o oluyor. Çeyrek
+saate denk gelen bir atış birkaç dakika kaydırılıyor, saniyeler de rastgele.
+Her gönderinin tam `:00` saniyede düşmesinin masum bir açıklaması yok.
+
+60 günlük simülasyonla ölçüldü: 10 satırın kullanımı 4-5 arasında eşit dağıldı,
+arka arkaya tekrar sıfır, çeyrek saate denk gelme 0/48.
+
+### İçerik kuralı: olmuş bir şey iddia etme
+
+Bu kural "her zaman geçerli olsun"dan daha sert. **Planlanmış bir satır hiçbir
+şeyin olduğunu iddia etmemeli.** Bu satırlar bugün yazılıp bilinmeyen bir güne
+paylaşılıyor, dolayısıyla "bugün şunu yayınladım" veya "bu hafta dört işe
+başladım" düştüğü gün sadece bayat değil, **yanlış** oluyor. Gerçekle hiç
+örtüşmeyen bir ilerleme raporu akışı hem yalan hem de fark edilmesi en kolay
+otomasyon türü.
+
+Selamlar, temenniler ve haller güvenli, çünkü hangi gün düşerse düşsün doğrular.
+Şekilleri de çeşitlendir (iki kelimeden kısa bir cümleye kadar), yoksa on tanesi
+tek bir şablon gibi okunuyor.
+
+### İçe / dışa aktar
+
+380 piksellik bir popup'ta elli satır yazmak kimsenin yapması gereken bir şey
+değil, o yüzden kurallar JSON olarak girip çıkabiliyor. **Yükle** mevcut listenin
+tamamını değiştiriyor ve önce soruyor. **Mevcutları yaz** o anki kuralları
+kutuya döküyor, yedek almak için.
+
+Kendi kurallarını eklentinin yanında bir `planlama-*.json` dosyasında tut. Bu
+desen gitignore'da: planlanmamış görünmesi gereken metinlerin herkese açık bir
+repoda işi yok, orada dursaydı bütün çabanın anlamı kalmazdı.
+
+### Örnek kural seti
+
+`planlama-kurallarim.json` dosyasında hazır beş kural var. Saatler Türkiye
+saatine göre ve hedef kitleye göre seçildi (aşağıdakiler kış saati; Avrupa ve ABD
+yazın bir saat kayıyor):
+
+| Kural | Gün | TRT | Hedefte karşılığı |
+| --- | --- | --- | --- |
+| Sabah | Her gün | 07:20–09:50 | Türkiye sabahı |
+| EN · Avrupa sabahı | Hafta içi | 10:00–11:40 | Londra 07:00, Berlin 08:00 |
+| Cuma | Cuma | 12:30–17:00 | Türkiye, cuma namazı sonrası |
+| EN · ABD günü | Hafta sonu | 17:10–19:40 | New York 09:10, Los Angeles 06:10 |
+| Akşam | Her gün | 20:15–22:30 | Türkiye akşamı |
+
+İki İngilizce kural ayrı bölgelere nişan alıyor, çünkü tek bir saat aralığı hem
+ABD'de hem Avrupa'da sabah olamıyor. Avrupa kuralı "good morning" diyor ve
+Avrupa sabahına düşüyor. ABD kuralı ise ABD'de sabah, Avrupa'da öğleden sonra
+olduğu için **saatten bağımsız** metinler kullanıyor ("happy weekend"), yoksa
+New York'ta öğlen "good night" demek zorunda kalırdı.
+
+Pencereler çakışmıyor, yani aynı anda iki gönderi düşmüyor.
+
+### İşin iç mekaniği
+
+- Slot ayırma **kural başına günde bir kez** deneniyor. Cevabı kaybolan bir slot
+  yeniden denenmiyor: çift planlanmış bir gönderi, kaçırılmış bir gönderiden kötü.
+- X, GraphQL işlem kimliğini her dağıtımında değiştiriyor. 400/404 gelince eklenti
+  sayfanın zaten yüklediği paketleri bir kez tarayıp güncel kimliği buluyor ve
+  `xverim_sched_qid_v1` altında saklıyor. Yani X'in bir güncellemesi tek bir başarısız
+  denemeye mal oluyor, kırık bir özelliğe değil.
+- Kuralları popup sahipleniyor (`xverim_schedule_v1`), kayıt durumunu içerik
+  betiği (`xverim_schedule_state_v1`, anahtar `kuralId@YYYY-AA-GG`). Ayrı
+  anahtarlar, böylece popup'ta yapılan bir kayıt uçuştaki bir kaydı ezemiyor.
+  Birden fazla sekme bir slotu ağ isteğinden **önce** sahipleniyor.
+- Bugünün penceresi kapandıysa o gün atlanıp sonraki uygun güne geçiliyor. 5
+  dakikadan yakın olan da atlanıyor, çünkü X neredeyse şu an olan bir `execute_at`
+  değerini reddediyor.
+- Aynı anda en fazla 40 bekleyen kayıt, geçiş başına en fazla 4 tane, aralarında
+  ~1 saniye. Otuz tane isteği tek seferde patlatmak hem X'e kaba hem de makine işi.
+- Her kural popup'ta gerçek durumunu gösteriyor: `10 mesaj · X'e kayıtlı ·
+  sıradaki yarın 08:12 (+4)`, ya da X'in döndürdüğü hata.
+
+---
+
+## Hız korkuluğu
+
+X'in beğeni ve takip üzerinde agresif otomatik sınırları var ve bot gibi görünen
+hesaplara gölge ban geliyor. 60 dakikalık kayan bir sayaç hızını izliyor ve
+`config.js`'teki yumuşak sınırları (`warnLikesPerHour`, `warnFollowsPerHour`)
+aştığında engellemeyen bir uyarı çubuğu gösteriyor. Hiçbir şeyi engellemiyor,
+sadece yavaşlamanı hatırlatıyor.
+
+---
+
+## Geri bildirim
+
+Eskiden konsola düşen her şey artık sağ altta küçük bir bildirim olarak çıkıyor:
+gönderi kutusuna giden bir taslak, bir API hatası, seçili tweet yokken basılan bir
+tuş. Bir taslak gönderi kutusuna ulaşamazsa panoya kopyalanıyor ve bildirim bunu
+söylüyor — üretilmiş bir taslak asla sessizce kaybolmuyor.
+
+Kişilik tanımı **hiçbir arayüzde gösterilmiyor.** `config.js`'ten sistem istemine
+gidiyor ve başka hiçbir yere; arka plan onu döndüren bir mesaj bile tanımlamıyor.
+
+---
+
+## Gizlilik
+
+- `DEEPSEEK_API_KEY` sadece `background.js` içinde okunuyor. İçerik betiklerine
+  veya popup'a asla gönderilmiyor.
+- Dışarı giden ağ istekleri:
+  - `api.deepseek.com/chat/completions` — sadece sen bir Üret / Taslak / `a`
+    düğmesine bastığında
+  - `x.com/i/api/graphql/…` — sadece planlama açıkken, senin yazdığın gönderiyi
+    kaydetmek için
+  - `abs.twimg.com` — sadece X'in işlem kimliği eskidiğinde, güncelini bulmak için
+  - Analitik yok, üçüncü taraf SDK yok, telemetri yok.
+- Panel konumu, sayaçlar, filtre durumu ve planlama kuralları makinendeki
+  `chrome.storage.local`'da duruyor.
+- **Safari'de anahtar derlenmiş `X Verim.app`'in içine giriyor**, yani oradaki
+  kural sadece "`config.js`'i commit'leme" değil, "bu .app'i kimseye verme".
+
+---
+
+## X arayüzünü değiştirirse
+
+Bütün seçiciler **`lib/x-dom.js`** dosyasının en üstündeki `SELECTORS` nesnesinde.
+x.com'da DevTools aç, bozulan öğenin yeni `data-testid`'sini bul, ilgili satırı
+güncelle, eklentiyi yeniden yükle.
+
+Aynı dosyadaki yardımcı fonksiyonlar (`getTweetArticle`, `getTweetText`,
+`getAuthorHandle`, `getLikeButton`, `getCountsFromGroup`, …) eklentinin X ile
+konuşma biçiminin tek kaynağı.
+
+---
+
+## JS dosyaları neden BOM ile başlıyor
+
+Safari, karakter kümesi belirtilmemiş arka plan betiklerini Latin-1 olarak
+çözüyor ve `başına` kelimesi `baÅŸÄ±na` oluyordu — arayüzde gözle görülür şekilde,
+sistem isteminde ve `lib/x-dom.js`'teki Türkçe etkileşim tablosunda ise görünmez
+şekilde (bozulmuş bir `beğeni` bütün beğeni sayılarını sessizce 0 okutuyordu).
+Bu yüzden her `.js` dosyası UTF-8 BOM ile başlıyor; bu iki tarayıcıda da UTF-8'i
+zorluyor ve JS tarafından boşluk sayılıyor. Düzenlerken koru: "UTF-8 with BOM"
+olarak kaydet. `content.css` sorunu farklı çözüyor, tek ASCII olmayan karakterini
+`\2022` kaçışıyla yazıyor.
+
+---
+
+## Dosyalar
 
 ```
 x-verim/
-├── manifest.json           MV3 manifest (storage perm only)
-├── config.example.js       Template — copy to config.js
-├── config.js               Personal config — NOT committed
-├── background.js           DeepSeek + guardrail counters (SW on Chrome, event page on Safari)
-├── lib/x-dom.js            SELECTORS + DOM helpers
+├── manifest.json              MV3 manifest
+├── config.example.js          Şablon — config.js olarak kopyala
+├── config.js                  Kişisel ayarlar — COMMIT EDİLMİYOR
+├── planlama-kurallarim.json   Planlama kuralların — COMMIT EDİLMİYOR
+├── background.js              DeepSeek çağrıları + hız sayaçları
+├── lib/x-dom.js               SELECTORS + DOM yardımcıları
 ├── content/
-│   ├── content.js          Focus model, shortcuts, filter, panel, popover
-│   └── content.css         Dark-theme styles
+│   ├── content.js             Odak modeli, kısayollar, filtre, panel, kart, planlayıcı
+│   ├── content.css            Koyu tema stilleri
+│   └── draft-bridge.js        Draft.js köprüsü (sayfa dünyasında çalışır)
 ├── popup/
 │   ├── popup.html
 │   ├── popup.js
 │   └── popup.css
-├── icons/                  16 / 48 / 128 px PNGs
+├── icons/                     16 / 48 / 128 px PNG
 ├── README.md
 └── .gitignore
 
-x-verim-safari/             Safari wrapper — references ../x-verim, no copies
+x-verim-safari/                Safari sarmalayıcı — ../x-verim'e referans verir
 └── X Verim/X Verim.xcodeproj
 ```
 
-## Privacy
-
-- `DEEPSEEK_API_KEY` is read in `background.js` only. It is never sent to content scripts or the popup.
-- Outgoing network calls:
-  - `api.deepseek.com/chat/completions` (only when you press a Generate / Draft / Analyze button)
-  - No analytics, no third-party SDK, no telemetry.
-- All data (panel position, guardrail counters, filter toggle) lives in `chrome.storage.local` on your machine.
-- On Safari the key ships **inside the built `X Verim.app`**, so the rule there is
-  "don't hand anyone this .app", not just "don't commit `config.js`".
-
-## Why the guardrail exists
-
-X has aggressive automated rate limiting on likes and follows, and shadowbans hit accounts that look bot-like. The 60-min rolling counter watches your pace and shows a non-blocking banner when you cross the soft limits in `config.js` (`warnLikesPerHour`, `warnFollowsPerHour`). It never blocks anything — it just reminds you to slow down.
+`draft-bridge.js` neden ayrı bir dosya: Safari, eklentinin yalıtılmış dünyasından
+gönderilen yapay pano olaylarını X'in React ağacına güvenilir şekilde iletmiyor.
+Bu köprü sayfanın kendi dünyasında çalışıp Draft.js'in gerçek `onPaste`
+işleyicisini çağırıyor, böylece metin editörün modeline doğrudan giriyor ve
+tarayıcı ortada hayalet bir metin düğümü bırakmıyor.
