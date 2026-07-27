@@ -80,6 +80,9 @@
     // Drafts currently on screen, fed back to the model on ↻ so a re-run
     // produces new angles instead of the same three sentences reworded.
     popoverDrafts: [],
+    // How many under-the-tweet replies were sent along as context (detail page
+    // only) — surfaced in the card so it is visible that the thread was read.
+    popoverReplyCtx: 0,
     toastHost: null
   };
 
@@ -1177,11 +1180,11 @@
       copyToClipboard(text).then(function (ok) {
         btn.classList.toggle("xverim-copy-ok", !!ok);
         btn.innerHTML = ok ? CHECK_ICON : COPY_ICON;
-        btn.title = ok ? "Copied" : "Copy failed";
+        btn.title = ok ? "Kopyalandı" : "Kopyalanamadı";
         setTimeout(function () {
           btn.classList.remove("xverim-copy-ok");
           btn.innerHTML = COPY_ICON;
-          btn.title = "Copy";
+          btn.title = "Kopyala";
         }, 1200);
       });
     });
@@ -1195,6 +1198,37 @@
     state.popoverEl = null;
     state.popoverArticle = null;
     state.popoverDrafts = [];
+    state.popoverReplyCtx = 0;
+  }
+
+  // A tweet's own page — /<handle>/status/<id> — where the conversation under
+  // it is actually on screen. The home timeline never matches.
+  function isTweetDetailPage() {
+    return /^\/[^/]+\/status\/\d+/.test(window.location.pathname);
+  }
+
+  // The replies already visible under the analyzed tweet, on its detail page
+  // only. Walked cell by cell (not via getArticles) so the collection stops at
+  // the first section heading — X appends a "Discover more" block of unrelated
+  // tweets after the conversation, and those must not be read as replies.
+  function collectReplyContext(article) {
+    if (!isTweetDetailPage()) return [];
+    var cell = article.closest && article.closest(D.SELECTORS.cellInnerDiv);
+    if (!cell) return [];
+    var out = [];
+    var node = cell.nextElementSibling;
+    while (node && out.length < 10) {
+      if (node.querySelector) {
+        if (node.querySelector("h2")) break;  // "Discover more" — conversation ended
+        var art = node.querySelector(D.SELECTORS.tweet);
+        if (art) {
+          var text = (D.getTweetText(art) || "").replace(/\s+/g, " ").trim();
+          if (text) out.push({ handle: D.getAuthorHandle(art) || "", text: text.slice(0, 280) });
+        }
+      }
+      node = node.nextElementSibling;
+    }
+    return out;
   }
 
   // Kick off (or re-run) the AI pass for a tweet and drive the popover through
@@ -1204,10 +1238,13 @@
     if (!article) return;
     var regenerate = !!(options && options.regenerate);
     if (!regenerate) state.popoverDrafts = [];
+    var contextReplies = collectReplyContext(article);
+    state.popoverReplyCtx = contextReplies.length;
     var payload = {
       text: D.getTweetText(article),
       authorHandle: D.getAuthorHandle(article),
       counts: D.getCountsFromGroup(article),
+      replies: contextReplies,
       previous: state.popoverDrafts.slice(0)
     };
     showAnalyzePopover(article, { status: "loading" });
@@ -1417,7 +1454,11 @@
     rSection.className = "xverim-popover-section";
     var rLabel = document.createElement("div");
     rLabel.className = "xverim-popover-label";
-    rLabel.textContent = "Yanıt taslakları";
+    // On a detail page the drafts were written with the visible replies as
+    // context — say so, or the feature is indistinguishable from not existing.
+    rLabel.textContent = state.popoverReplyCtx > 0
+      ? ("Yanıt taslakları · " + state.popoverReplyCtx + " yanıt okundu")
+      : "Yanıt taslakları";
     rSection.appendChild(rLabel);
 
     if (!replies.length) {

@@ -11,7 +11,7 @@
     // ---- Model ----
     DEEPSEEK_API_KEY: "PASTE_YOUR_KEY_HERE",
     DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
-    DEEPSEEK_MODEL: "deepseek-chat",
+    DEEPSEEK_MODEL: "deepseek-v4-pro",
     AI_TEMPERATURE: 0.8,
     AI_TIMEOUT_MS: 45000,      // give up on a stalled request instead of shimmering forever
 

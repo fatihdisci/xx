@@ -33,6 +33,8 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     "These words are banned unless the source text used them first: leverage, unlock, delve, dive into, game changer, journey, landscape, ecosystem, robust, seamless, empower, curated, elevate, \"in today's world\", \"at the end of the day\".",
     "Vary the shape across a batch. Some drafts five or six words, some two short sentences. Never the same length twice, never the same opening word twice.",
     "A bit blunt, dry or unfinished beats polished. Do not smooth it out, do not make it quotable.",
+    "Small imperfections are welcome when they fit how this person types: starting lowercase, skipping the final period, a casual filler word. Never force them, and never misspell on purpose.",
+    "React to one concrete detail of the thing in front of you, not to its topic in general. The tweet mentions a specific number, tool, place or moment — grab that.",
     "Specifics over adjectives. A number, a name, a thing that happened beats \"incredible\" or \"powerful\".",
     "Hashtags: none. One only if that hashtag is genuinely how people talk about the thing.",
     "No engagement bait. No \"thoughts?\", no \"agree?\", no fake enthusiasm, no exclamation marks unless something is actually funny."
@@ -105,6 +107,7 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
       lines.push("- No credentials, no expert framing. Never open with 'As someone who…'. Never open with 'I '.");
       lines.push("- No compliment openers: no 'Great point', 'So true', 'Well said', 'This', 'Exactly this'.");
       lines.push("- It is fine to be brief to the point of curt. A four-word reply is a real reply.");
+      lines.push("- You are one voice in a public thread, not the last word on it. Sometimes the honest reaction is just being amused, curious or mildly annoyed — write that, don't upgrade it to analysis.");
     } else {
       lines.push("- These are their own posts: something they noticed today, something that annoyed them, a small opinion, a question they actually want answered.");
       lines.push("- Do not write 'content'. No hooks, no thread openers, no 'here is what I learned', no numbered lists.");
@@ -138,7 +141,7 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     var base = (C.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1").replace(/\/+$/, "");
     var url = base + "/chat/completions";
     var body = {
-      model: C.DEEPSEEK_MODEL || "deepseek-v4-flash",
+      model: C.DEEPSEEK_MODEL || "deepseek-v4-pro",
       messages: messages,
       temperature: typeof o.temperature === "number" ? o.temperature : (C.AI_TEMPERATURE != null ? C.AI_TEMPERATURE : 0.8)
     };
@@ -263,6 +266,33 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
   // language, each paired with a translation into the user's language so a
   // foreign-language draft can be understood before posting. The source tweet
   // itself is NOT translated.
+  //
+  // On a tweet's detail page the content script also sends the replies already
+  // visible under it (payload.replies). They are context only — the drafts
+  // still answer the tweet — but they let the model read the room: skip the
+  // point everyone already made, and match the register the thread settled on.
+  function conversationBlock(replies) {
+    var list = (Array.isArray(replies) ? replies : [])
+      .map(function (r) {
+        if (!r || typeof r !== "object") return null;
+        var text = String(r.text || "").replace(/\s+/g, " ").trim();
+        if (!text) return null;
+        return { handle: String(r.handle || "").trim(), text: text.slice(0, 280) };
+      })
+      .filter(Boolean)
+      .slice(0, 10);
+    if (!list.length) return "";
+    return "\nReplies already posted under this tweet, in order:\n"
+      + list.map(function (r) {
+          return "- " + (r.handle ? "@" + r.handle : "someone") + ": \"" + r.text + "\"";
+        }).join("\n")
+      + "\nRead the room before drafting. These replies are context, not the thing you answer: "
+      + "you are still replying to the tweet itself. Do not repeat a point someone already made — "
+      + "if your first instinct is already down there, take a different angle or go one level deeper. "
+      + "It is fine to side with or push against where the thread is leaning, and fine to ask the "
+      + "question nobody has asked yet.\n";
+  }
+
   async function analyzeTweet(payload) {
     var p = payload || {};
     var analyzeCfg = C.ANALYZE || {};
@@ -270,7 +300,8 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     var replyCount = Math.max(1, Math.min(5, analyzeCfg.replyCount || 3));
     var sys = buildSystemPrompt("respond",
       'Return ONLY valid JSON with shape {"replies": [{"text": string, "translation": string}, ...]}.');
-    var user = "Tweet by @" + (p.authorHandle || "unknown") + ": \"" + (p.text || "") + "\"\n\n"
+    var user = "Tweet by @" + (p.authorHandle || "unknown") + ": \"" + (p.text || "") + "\"\n"
+             + conversationBlock(p.replies) + "\n"
              + "Write " + replyCount + " reply drafts to this tweet, ready to post as-is — finished tweets, not descriptions of an approach.\n"
              + "text: the reply itself, in the SAME language as the tweet. Under 240 chars. Each one a genuinely different reaction — "
              + "one can agree and add a detail, one can push back, one can just be funny, one can ask the thing you actually want to know — "

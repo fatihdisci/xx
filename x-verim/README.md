@@ -174,6 +174,11 @@ be obvious and never surprising:
   out of the field first, so a stray Esc never throws away an edit.
 - ↻ regenerates. It sends the drafts already on screen back to the model as
   "don't repeat these", so a re-run means *different angles*, not a reword.
+- On a tweet's **detail page**, the replies already visible under it (up to 10,
+  stopping before X's "Discover more" block) are sent along as context: drafts
+  skip the points the thread already made and match its register. The card's
+  label shows `· N yanıt okundu` when this happened. The home timeline never
+  does this — there are no replies on screen to read.
 - Errors and empty results get a `Tekrar dene` button instead of a dead card.
 
 ### Floating panel (toggle with `v`)

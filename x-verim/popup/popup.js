@@ -87,7 +87,7 @@
     body.className = "xverim-idea-text";
     body.value = text;
     body.rows = 1;  // autoGrow sets the real height; a larger rows= would floor it
-    body.setAttribute("aria-label", "Post idea (editable)");
+    body.setAttribute("aria-label", "Gönderi fikri (düzenlenebilir)");
 
     var actions = document.createElement("div");
     actions.className = "xverim-idea-actions";
