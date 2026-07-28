@@ -6,19 +6,20 @@ Safari'de çalışır, Web Store'a çıkmaz, sadece senin makinende durur.
 Ne yapar, kısaca:
 
 - **Klavyeyle gezinme** — `j` / `k` ile tweetler arasında, fareye dokunmadan
-- **Tek tuşla işlem** — `l` beğen, `s` yer işareti, `f` takip et
-- **AI yardımı** — gönderi fikirleri, yanıt taslakları (DeepSeek üzerinden)
-- **Niş filtresi** — akışta ilgilenmediğin tweetleri soluklaştırır, ilgilendiklerini işaretler
+- **Yanıt taslakları** — `a` ile, senin sesinde, tweetin kendi dilinde (DeepSeek üzerinden)
+- **Maliyet sayacı** — her taslağın gerçekte kaça mal olduğu, popup'ta
 - **Gönderi planlama** — yazdığın mesajları X'in kendi planlayıcısına kaydeder, bilgisayar kapalıyken bile paylaşılır
-- **Hız korkuluğu** — saatlik beğeni/takip hızın fazla artarsa uyarır
+
+Bir zamanlar niş filtresi, sıfırdan gönderi üretme, beğeni/takip kısayolları ve
+hız korkuluğu da vardı. Hiçbiri kullanılmadı, hepsi silindi. Beğenmek ve takip
+etmek X'in kendi tuşlarıyla zaten çalışıyor.
 
 ---
 
 ## Değişmeyecek dört kural
 
-**1. Tek otomasyon, senin kurduğun otomasyon.** Beğenme, takip, yanıt ve anlık
-gönderi her zaman senin tuşuna basmanı ister; eklenti kendi kafasına göre
-"Gönder" düğmesine basmaz. Tek istisna var ve bilerek konuldu: popup'taki
+**1. Tek otomasyon, senin kurduğun otomasyon.** Yanıt her zaman senin tuşuna
+basmanı ister; eklenti kendi kafasına göre "Gönder" düğmesine basmaz. Tek istisna var ve bilerek konuldu: popup'taki
 *Gönderi planlama* kartına yazdığın gönderiler, senin seçtiğin saatte, senin
 yazdığın metinle paylaşılır. Bunun dışında hiçbir şey o düğmeye dokunamaz ve
 planlama varsayılan olarak **kapalıdır**.
@@ -44,10 +45,11 @@ kendi API'sine senin yazdığın gönderiler. Başka hiçbir yere hiçbir şey g
    - `PERSONA.identity` / `niche` / `tone` — kim olduğun, ne hakkında yazdığın, nasıl konuştuğun
    - `PERSONA.samples` — **kalitede en büyük fark burada.** Gerçekten yazdığın
      birkaç tweet. Model bunların ritmini kopyalar, içeriğini asla.
-   - İsteğe bağlı: `FILTER` ayarları, `AI_TIMEOUT_MS` (varsayılan 45 sn)
+   - İsteğe bağlı: `PRICING.usdTry` (popup'ta ₺ karşılığı), `AI_TIMEOUT_MS`
+     (varsayılan 45 sn)
 2. `chrome://extensions` aç, sağ üstten **Developer mode**'u aç.
 3. **Load unpacked** de ve `x-verim/` klasörünü seç.
-4. `https://x.com` aç. Panel kısayolu `v`.
+4. `https://x.com` aç. `j` / `k` ile gez, `a` ile taslak üret.
 
 `config.js` gitignore'da, yani anahtarın hiçbir zaman repoya girmez. Bu dosya
 olmadan eklenti hiç yüklenmez, örnek dosyanın commit'lenmiş olmasının sebebi bu.
@@ -93,21 +95,20 @@ service worker'da var olduğu için `background.js` onu kontrol ediyor — Safar
 
 ## Klavye kısayolları
 
-Hepsi `config.js` içindeki `SHORTCUTS` bölümünden değiştirilebilir. Bir tuşu `""`
-yaparsan o işlem tamamen kapanır.
+Üç tuş, hepsi bu. `config.js` içindeki `SHORTCUTS` bölümünden değiştirilebilir,
+bir tuşu `""` yaparsan o işlem tamamen kapanır.
 
 | Tuş | Ne yapar |
 | --- | --- |
 | `j` | Sonraki tweete geç |
 | `k` | Önceki tweete geç |
-| `l` | Beğen / beğeniyi geri al |
-| `s` | Yer işaretine ekle |
-| `f` | Yazarı takip et |
-| `r` | Yanıt kutusunu aç ve AI taslağını içine koy |
-| `a` | Taslak kartını aç: hazır yanıt taslakları, her birinin Türkçe çevirisiyle |
-| `v` | Yüzen paneli aç/kapat |
+| `a` | Taslak kartını aç |
 | `1`…`5` | Kart açıkken: o taslağı yanıt kutusuna koy |
-| `Esc` | Önce kartı, sonra paneli kapat |
+| `Esc` | Kartı kapat |
+
+Beğeni, yer işareti, takip ve panel kısayolları kaldırıldı. İlk üçü X'in kendi
+tuşlarıyla zaten çalışıyordu ve aynı harfleri iki kere sahiplenmenin kimseye
+faydası yoktu; panelin gösterdiği iki şey (filtre, hız sayacı) de artık yok.
 
 Bir `input`, `textarea` veya yazılabilir alanda yazarken kısayollar devre dışı —
 karttaki düzenlenebilir taslak kutuları da buna dahil.
@@ -135,23 +136,13 @@ söylüyor. **Çerçeve yok** — X zaman tünelindeki satırları kart gibi çi
 birini çerçevelemek eklentinin sayfayı ele geçirmiş gibi görünmesine yol açıyordu.
 
 Çubuk ve etiket X'in kendi HTML'inin içine değil, **yüzen bir katmana** çiziliyor.
-Böylece niş filtresi tarafından soluklaştırılamıyor, satır tarafından kırpılamıyor
-ve X'in hover renkleriyle kavga edemiyor. Çubuk satırın gerçekten görebildiğin
+Böylece satır tarafından kırpılamıyor ve X'in hover renkleriyle kavga edemiyor. Çubuk satırın gerçekten görebildiğin
 kısmına ortalanıyor, yani ekrandan uzun bir tweet bile işaretini gösteriyor. X'in
 üstteki yapışkan başlığının yüksekliği tahmin edilmiyor, ölçülüyor — anasayfadaki
 sekme çubuğu onu diğer sayfalardan daha uzun yapıyor.
 
 Yanıt veya gönderi penceresi açıkken işaretin tamamı gizleniyor, X'in o pencerenin
 içine kopyaladığı tweet hiçbir zaman seçilemiyor.
-
-Anahtar kelime vurgusu **yeşil ve 2px**, aktif tweet çubuğu **mavi ve 3px**. Eskiden
-ikisi de aynı yerde 3px maviydi; hem vurgulu hem aktif olan bir satırda tam üst
-üste biniyorlardı ve ikisi de okunmuyordu.
-
-**Soluklaştırılmış** bir tweet hâlâ tıklanabilir ve üzerine gelince %90'a dönüyor.
-Eskiden `pointer-events: none` taşıyordu, yani soluk bir tweet açılamıyor,
-linklerine tıklanamıyor, seçilemiyordu — bir şeyi soluklaştırmak onu ortadan
-kaldırmakla aynı şey değil. `hide` modu sert muamele olarak duruyor.
 
 Konsoldan `window.__xverim.applyFocus()` ile bu geçişi elle adımlayabilir,
 `window.__xverim.articles()` ile hangi satırları değerlendirdiğini görebilirsin.
@@ -167,42 +158,62 @@ içinde hazır yanıt taslakları oluyor.
 
 - Üstte kaynak tweetin kullanıcı adı ve ilk satırı duruyor. Bir oturumda birkaç
   kart açınca hangisine cevap yazdığın belirsizleşiyordu.
-- Her taslak **yerinde düzenlenebilir**, canlı karakter sayacı var (240'ı geçince
-  sarı, 280'i geçince kırmızı). `Yanıtla`, `Kopyala` ve rakam tuşları hepsi o anda
+- **Kartın tamamı düğme.** Metnin dışında bir yere tıklamak taslağı yanıt
+  kutusuna gönderiyor. Eskiden her tweet için üç kez küçük bir `Yanıtla`
+  düğmesi aranıyordu, döngünün en yavaş kısmı oydu.
+- Metnin kendisi **yerinde düzenlenebilir**, canlı karakter sayacı var (240'ı
+  geçince sarı, 280'i geçince kırmızı). Rakam tuşları ve kopyalama hepsi o anda
   kutuda ne yazıyorsa onu kullanıyor.
 - Taslağın içindeyken `Cmd`/`Ctrl` + `Enter` onu yanıt kutusuna gönderiyor. `Esc`
   önce kutudan çıkıyor, böylece yanlışlıkla basılan bir Esc düzenlemeni çöpe atmıyor.
 - ↻ yeniden üretiyor. Ekrandaki taslakları modele "bunları tekrarlama" diye geri
   gönderiyor, yani yeniden üretim *farklı açılar* demek, aynı cümlenin yeniden
   yazımı değil.
+- Kartın altında o çağrının **gerçek maliyeti** yazıyor. Günde elli kez
+  tekrarlanan bir alışkanlığın fiyatı görünmez olmamalı.
 - **Tweet detay sayfasındayken**, tweetin altında görünen yanıtlar (en fazla 10
   tane, X'in "Daha fazlasını keşfet" bloğundan önce durarak) modele bağlam olarak
   gidiyor. Taslaklar thread'de zaten söylenmiş şeyleri tekrarlamıyor ve ortamın
-  tonuna uyuyor. Bu olduğunda kartın etiketi `· N yanıt okundu` diyor. Anasayfada
-  bu olmuyor, çünkü orada okunacak yanıt yok.
+  tonuna uyuyor. Bu olduğunda kartın altı `N yanıt okundu` diyor.
 - Hata veya boş sonuç durumunda ölü bir kart yerine `Tekrar dene` düğmesi çıkıyor.
-
-### `r` — doğrudan yanıt kutusuna
-
-Yanıt penceresini açıyor ve tek bir taslağı içine koyuyor. Göndermeye yine sen
-karar veriyorsun.
 
 ### Taslakların sesi nereden geliyor
 
 `background.js` içindeki `buildSystemPrompt()` bir taslağın sesinin belirlendiği
-tek yer ve iki modu var: `compose` (senin nişlerin konunun kendisi) ve `respond`
-(kaynak tweet konu, nişler sadece üsluba renk katıyor).
+tek yer. Kurallar sıfat yerine somut yasaklar olarak yazılmış, çünkü "doğal ol"
+hiçbir şeyi değiştirmezken "uzun tire kullanma" değiştiriyor. Dört blok var:
 
-Ses kuralları sıfat yerine somut yasaklar olarak yazılmış, çünkü "doğal ol" hiçbir
-şeyi değiştirmezken "uzun tire kullanma" değiştiriyor. Ortak liste bir metni ilk
-bakışta makine yapımı gösteren kalıpları eliyor — "X değil, Y", üç maddelik
-listeler, retorik soruyla açılış — ve bir partideki üç taslağın üç aynı cümle
-olarak gelmemesi için uzunluk çeşitliliği istiyor.
+**`HUMAN_VOICE`** — bir metni ilk bakışta makine yapımı gösteren kalıpları eliyor:
+"X değil, Y", üç maddelik listeler, retorik soruyla açılış, telefon klavyesinin
+üretmediği noktalama (uzun tire, noktalı virgül, kıvrık tırnak). Ayrıca cümle
+simetrisini yasaklıyor — eşit uzunlukta iki yan cümle, düzgün kapanan tempo,
+aslında en yüksek sesli AI işareti bu.
 
-`respond` modunda ayrıca özetlemek yerine tepki vermesi söyleniyor: tweeti geri
-tekrarlama, iltifatla açma, tweetin tonuna ve uzunluğuna uy, dört kelimelik bir
-yanıt gerçek bir yanıttır. `config.js`'teki `PERSONA.samples` üslup çıpası olarak
+**`NO_FAKE_WARMTH`** — modelin varsayılan hâli tanımadığı insana sıcaklık
+performansı yapmak. "Anlıyorum", "çok haklısın", "hepimiz", itirazdan önce
+yumuşatma yastığı, "harika/muhteşem" — hepsi yasak. Sevilmek hedef değil;
+ilgisizlik de geçerli bir çıktı.
+
+**`TURKISH_VOICE`** — İngilizce kurallar Türkçe çıktıyı kurtarmıyor, çünkü Türkçe
+AI kokusu bambaşka yerden geliyor: `dolayısıyla / kısacası / öte yandan` gibi yazı
+dili bağlaçları, `-maktadır` kaydı, `aslında / gerçekten / oldukça` doldurucuları,
+"bu sadece X değil aynı zamanda Y" kalıbı. Karşılığında serbest bırakılanlar:
+kesme işaretini atlamak (`Xte`, `GitHubda`), `bi / geliyo` gibi konuşma
+kısaltmaları, `sen` hitabı ve `prompt / agent / commit / build` gibi terimleri
+çevirmeden bırakmak.
+
+**`REWRITE_PAIRS`** — aynı düşüncenin yanlış ve doğru yazımı yan yana. Kural
+hedefi tarif ediyor, örnek hareketi gösteriyor; kırk yasağı akılda tutan bir
+modele göre iki yazımı görmüş model kendini çok daha güvenilir düzeltiyor.
+
+Bunların üstüne `config.js`'teki `PERSONA.samples` üslup çıpası olarak
 yapıştırılıyor — çıktının sana ne kadar benzeyeceği üzerindeki en güçlü kol bu.
+`PERSONA.tone` içinde "samimi" yazmamaya dikkat et: model bunu okuyunca tam da
+yukarıda yasaklanan şeyi yapıyor.
+
+Sampler tarafında `frequency_penalty: 0.3` var. Prompt kuralları tek başına bir
+partinin aynı şablona oturmasını engellemiyor; üç taslağın üç farklı ruh hâlinde
+olmasını sağlayan şey bu.
 
 Her isteme bugünün gerçek tarihi de yazılıyor. Bir modelin "şimdi" algısı eğitim
 kesim tarihi olduğu için taslaklar sessizce daha eski bir yılı varsayıp kendilerini
@@ -212,56 +223,25 @@ gece boyu açık kalan bir sekme dünün tarihini taşımıyor.
 
 ---
 
-## Niş filtresi
-
-`config.js` içindeki `FILTER` bölümüne göre akıştaki tweetleri işaretliyor:
-
-- `keywordsInclude` — bu kelimeleri içeren tweetler yeşil çubukla **vurgulanıyor**
-- `keywordsExclude` — bu kelimeleri içerenler **soluklaştırılıyor** (`hideMode: "dim"`)
-  veya tamamen **gizleniyor** (`hideMode: "hide"`)
-- `mutedAuthors` — bu kullanıcı adları gizleniyor
-- `highlightMinLikes` — beğenisi bu sayının üstündekiler vurgulanıyor
-
-Filtre panelden ve popup'tan canlı açılıp kapatılıyor, iki taraf birbiriyle
-senkron. Türkçe'ye özel bir ayrıntı: küçük harfe çevirirken `tr-TR` kullanılıyor,
-çünkü düz `toLowerCase()` "İ" harfini bozuyor ve "İçtihat" ile "içtihat"
-eşleşmiyordu.
-
----
-
-## Yüzen panel (`v`)
-
-- Filtre açma/kapama (canlı, popup ile senkron)
-- Son 60 dakikanın beğeni ve takip hız göstergeleri, `GUARDRAILS` sınırlarına
-  karşı (%75'te sarı, sınırda kırmızı)
-- Katlanabilir kısayol listesi — canlı `SHORTCUTS`'tan üretiliyor, yani özel bir
-  tuş asla listedekiyle çelişemiyor
-
-Başlığından tutup sürükleyebilirsin. Konum `chrome.storage.local`'da saklanıyor
-ve pencere sonradan küçültülürse görünür alana geri çekiliyor.
-
----
-
 ## Popup (araç çubuğu simgesi)
 
-**Niş filtresi** — içerik betiğiyle çift yönlü senkron.
+İki şey var: maliyet ve planlama.
 
-**Gönderi fikirleri** — konu (isteğe bağlı), kaç tane, ve bir *açı* (karışık /
-görüş / ders / soru / an / gözlem). Her sonuç **düzenlenebilir** bir kart, 280
-karakter sayacıyla, yanında `Kopyala` ve `Kutuya koy`. Konu, adet ve açı popup
-kapanınca kayboluyor değil, saklanıyor. Konu kutusunda `Enter` ya da herhangi bir
-yerde `Cmd`/`Ctrl` + `Enter` üretiyor, yeniden üretim listedekilerden farklı
-fikirler istiyor.
+**Maliyet** — üstte toplam, altında bugün, taslak başına ortalama ve son çağrı.
+Yedi günlük mini grafik bugünün olağan dışı olup olmadığını aritmetik yapmadan
+söylüyor. En altta token dağılımı (giriş / önbellek / çıkış) ve kullanılan birim
+fiyatlar duruyor.
 
-`Kutuya koy` açık x.com sekmesindeki **Gönderi yayınla** düğmesine tıklıyor,
-kutunun yüklenmesini bekliyor ve metni içine koyuyor. Gönder düğmesine yine sen
-basıyorsun.
+Bunların hiçbiri tahmin değil: `background.js` her yanıtın `usage` alanını okuyup
+`chrome.storage.local`'a yazıyor. DeepSeek üç ayrı fiyat uyguluyor ve önbellekten
+gelen giriş, ıskalayan girişten ~50 kat ucuz — tek bir karma sayı, sistem istemini
+tekrar tekrar gönderen bir oturumda (yani buradaki her oturumda) bir mertebe
+yanlış olurdu, o yüzden üçü ayrı tutuluyor.
 
-**Hız göstergeleri** — son 60 dakika, sınırlar arka plandan geliyor (popup
-`config.js`'i hiç yüklemiyor).
+Bir taslak zaman tünelinde üretildiğinde popup açıksa toplam anında güncelleniyor.
+`sıfırla` sadece buradaki sayacı sıfırlıyor, DeepSeek'teki gerçek faturanı değil.
 
-Yanıt taslakları popup'ta yok; tweetin zaten durduğu yerde, zaman tünelinde
-yaşıyorlar.
+**Planlama** — aşağıda.
 
 ---
 
@@ -345,20 +325,10 @@ dakika sürer.
 
 ---
 
-## Hız korkuluğu
-
-X'in beğeni ve takip üzerinde agresif otomatik sınırları var ve bot gibi görünen
-hesaplara gölge ban geliyor. 60 dakikalık kayan bir sayaç hızını izliyor ve
-`config.js`'teki yumuşak sınırları (`warnLikesPerHour`, `warnFollowsPerHour`)
-aştığında engellemeyen bir uyarı çubuğu gösteriyor. Hiçbir şeyi engellemiyor,
-sadece yavaşlamanı hatırlatıyor.
-
----
-
 ## Geri bildirim
 
 Eskiden konsola düşen her şey artık sağ altta küçük bir bildirim olarak çıkıyor:
-gönderi kutusuna giden bir taslak, bir API hatası, seçili tweet yokken basılan bir
+yanıt kutusuna giden bir taslak, bir API hatası, seçili tweet yokken basılan bir
 tuş. Bir taslak gönderi kutusuna ulaşamazsa panoya kopyalanıyor ve bildirim bunu
 söylüyor — üretilmiş bir taslak asla sessizce kaybolmuyor.
 
@@ -372,8 +342,7 @@ gidiyor ve başka hiçbir yere; arka plan onu döndüren bir mesaj bile tanımla
 - `DEEPSEEK_API_KEY` sadece `background.js` içinde okunuyor. İçerik betiklerine
   veya popup'a asla gönderilmiyor.
 - Dışarı giden ağ istekleri:
-  - `api.deepseek.com/chat/completions` — sadece sen bir Üret / Taslak / `a`
-    düğmesine bastığında
+  - `api.deepseek.com/chat/completions` — sadece sen `a`'ya bastığında
   - `x.com/i/api/graphql/…` — sadece planlama açıkken, senin yazdığın gönderiyi
     kaydetmek için
   - `abs.twimg.com` — sadece X'in işlem kimliği eskidiğinde, güncelini bulmak için
@@ -382,8 +351,9 @@ gidiyor ve başka hiçbir yere; arka plan onu döndüren bir mesaj bile tanımla
 Planlama isteklerindeki `X-Client-Transaction-Id`, MIT lisanslı
 [`x-client-transaction-id`](https://github.com/Lqm1/x-client-transaction-id)
 uygulamasından tarayıcıya uyarlanan kodla yerel olarak üretilir.
-- Panel konumu, sayaçlar, filtre durumu ve kesin tarihli JSON planı makinendeki
-  `chrome.storage.local`'da duruyor.
+- Maliyet sayacı ve kesin tarihli JSON planı makinendeki
+  `chrome.storage.local`'da duruyor. Sayaç sadece token adetleri ve tarih tutuyor,
+  hiçbir tweet metni saklanmıyor.
 - **Safari'de anahtar derlenmiş `X Verim.app`'in içine giriyor**, yani oradaki
   kural sadece "`config.js`'i commit'leme" değil, "bu .app'i kimseye verme".
 
@@ -396,7 +366,7 @@ x.com'da DevTools aç, bozulan öğenin yeni `data-testid`'sini bul, ilgili sat�
 güncelle, eklentiyi yeniden yükle.
 
 Aynı dosyadaki yardımcı fonksiyonlar (`getTweetArticle`, `getTweetText`,
-`getAuthorHandle`, `getLikeButton`, `getCountsFromGroup`, …) eklentinin X ile
+`getAuthorHandle`, `getReplyButton`, `getCountsFromGroup`, …) eklentinin X ile
 konuşma biçiminin tek kaynağı.
 
 ---
@@ -422,10 +392,11 @@ x-verim/
 ├── config.example.js          Şablon — config.js olarak kopyala
 ├── config.js                  Kişisel ayarlar — COMMIT EDİLMİYOR
 ├── planlama-60-gun.json       Kesin tarihli kişisel plan — COMMIT EDİLMİYOR
-├── background.js              DeepSeek çağrıları + hız sayaçları
+├── background.js              DeepSeek çağrıları + sistem istemi + maliyet sayacı
 ├── lib/x-dom.js               SELECTORS + DOM yardımcıları
+├── lib/x-transaction.js       Planlama için X-Client-Transaction-Id üretimi
 ├── content/
-│   ├── content.js             Odak modeli, kısayollar, filtre, panel, kart, planlayıcı
+│   ├── content.js             Odak modeli, kısayollar, taslak kartı, planlayıcı
 │   ├── content.css            Koyu tema stilleri
 │   └── draft-bridge.js        Draft.js köprüsü (sayfa dünyasında çalışır)
 ├── popup/

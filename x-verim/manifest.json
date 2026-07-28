@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "X Verim",
   "version": "0.1.0",
-  "description": "Personal accelerator for X — keyboard shortcuts, niche filter, AI assist, scheduled posts. The only automation is what you schedule yourself.",
+  "description": "Personal reply-draft tool for X — j/k to move, a to draft, plus scheduled posts. The only automation is what you schedule yourself.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://x.com/*",

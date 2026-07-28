@@ -1,4 +1,5 @@
-/* X Verim — content-script styles. Dark theme, native-looking. */
+/* X Verim — content-script styles. Dark theme, native-looking.
+   Two surfaces only: the active-tweet marker and the drafts card. */
 
 /* ---------- Active tweet ---------- */
 /* Three quiet signals instead of one loud one: the row lifts slightly, a short
@@ -6,8 +7,8 @@
    pressing. No border — X doesn't draw timeline rows as cards, and framing one
    made the extension look like it had taken the page over.
    The bar and label are drawn by a floating overlay rather than by styles
-   inside X's DOM, so they can't be faded by the filter's opacity, can't be
-   clipped by the row, and can't intercept clicks on real timeline controls. */
+   inside X's DOM, so they can't be clipped by the row and can't intercept
+   clicks on real timeline controls. */
 .xverim-focused {
   background-color: rgba(29, 155, 240, 0.06) !important;
   /* Short on purpose: while you scroll fast the tint is fading out of the row
@@ -49,183 +50,9 @@
   white-space: nowrap;
 }
 
-/* Dimmed is the soft treatment — "hide" is the hard one. It used to also set
-   pointer-events: none, which meant a dimmed tweet could not be opened, its
-   links could not be clicked, and it could not be selected by clicking. Fading
-   something out is not the same as taking it away, so it stays interactive and
-   comes most of the way back when you point at it. */
-.xverim-dim {
-  opacity: 0.35 !important;
-}
-/* The transition sits on the hover state, not on the base rule. On the base
-   rule it also animates the moment the class lands on a freshly mounted row —
-   so every dimmed tweet flashed at full opacity for a beat as you scrolled. */
-.xverim-dim:hover {
-  opacity: 0.9 !important;
-  transition: opacity 120ms ease;
-}
-
-.xverim-hide {
-  display: none !important;
-}
-
-/* Green, and a hair slimmer than the active bar, because the two used to be the
-   same 3px blue at the same left edge: on a row that was both highlighted and
-   active they sat exactly on top of each other and neither could be read. They
-   mean different things — "matches what you follow" vs "this is the one your
-   keys act on" — so they look different. */
-.xverim-highlight {
-  position: relative;
-}
-.xverim-highlight::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: #00ba7c;
-  border-radius: 2px;
-  pointer-events: none;
-}
-
-/* ---------- Floating panel ---------- */
-.xverim-panel {
-  position: fixed;
-  width: 320px;
-  max-height: 80vh;
-  overflow: auto;
-  background: #16181c;
-  color: #e7e9ea;
-  border: 1px solid #2f3336;
-  border-radius: 12px;
-  padding: 14px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  z-index: 2147483646;
-  display: none;
-  scrollbar-width: thin;
-  scrollbar-color: #2f3336 transparent;
-}
-.xverim-panel::-webkit-scrollbar { width: 6px; }
-.xverim-panel::-webkit-scrollbar-thumb { background: #2f3336; border-radius: 3px; }
-.xverim-panel.xverim-open { display: block; }
-
-.xverim-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  cursor: move;
-  user-select: none;
-}
-.xverim-panel-title {
-  font-weight: 700;
-  font-size: 14px;
-  color: #e7e9ea;
-}
-.xverim-icon-btn {
-  background: transparent;
-  border: 0;
-  color: #71767b;
-  font-size: 18px;
-  line-height: 1;
-  padding: 2px 6px;
-  cursor: pointer;
-  border-radius: 6px;
-}
-.xverim-icon-btn:hover { background: rgba(255, 255, 255, 0.06); color: #e7e9ea; }
-
-.xverim-panel-section { margin-bottom: 10px; }
-.xverim-panel-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #71767b;
-  margin-bottom: 4px;
-}
-.xverim-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  color: #e7e9ea;
-}
-.xverim-toggle input { cursor: pointer; }
-
-/* Pace meters — a bar says "how close am I" at a glance; a bare number doesn't. */
-.xverim-meter-row { margin-bottom: 9px; }
-.xverim-meter-row:last-child { margin-bottom: 0; }
-.xverim-meter-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #8b98a5;
-  margin-bottom: 5px;
-}
-.xverim-meter-head b {
-  color: #e7e9ea;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.xverim-meter {
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-}
-.xverim-meter i {
-  display: block;
-  height: 100%;
-  width: 0;
-  border-radius: 999px;
-  background: #1d9bf0;
-  transition: width 220ms ease, background 220ms ease;
-}
-.xverim-meter i.xverim-near { background: #ffd400; }
-.xverim-meter i.xverim-over { background: #f4212e; }
-
-/* Shortcut cheat sheet — collapsed by default, so it teaches without nagging. */
-.xverim-keys { margin-bottom: 0; }
-.xverim-keys > summary {
-  cursor: pointer;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #71767b;
-  outline: none;
-  list-style: none;
-  padding: 2px 0;
-}
-.xverim-keys > summary::-webkit-details-marker { display: none; }
-.xverim-keys > summary:hover { color: #e7e9ea; }
-.xverim-keys[open] > summary { color: #e7e9ea; margin-bottom: 6px; }
-.xverim-key-list { display: flex; flex-direction: column; gap: 5px; }
-.xverim-key-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #b3bcc4;
-}
-.xverim-kbd {
-  flex: 0 0 auto;
-  min-width: 32px;
-  text-align: center;
-  background: #202327;
-  border: 1px solid #2f3336;
-  border-bottom-width: 2px;
-  border-radius: 5px;
-  padding: 2px 5px;
-  font: 700 10.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: #e7e9ea;
-}
-
-/* ---------- Analyze popover ---------- */
+/* ---------- Drafts card ---------- */
 @keyframes xverim-pop-in {
-  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  from { opacity: 0; transform: translateY(8px) scale(0.975); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes xverim-fade-in {
@@ -233,113 +60,152 @@
   to   { opacity: 1; }
 }
 @keyframes xverim-card-in {
-  from { opacity: 0; transform: translateY(5px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes xverim-shimmer {
   from { background-position: -340px 0; }
   to   { background-position: 340px 0; }
 }
+/* Indeterminate: the model gives no progress signal, so the bar promises
+   activity rather than completion — it must never look stuck near the end. */
+@keyframes xverim-progress {
+  0%   { transform: translateX(-100%) scaleX(0.35); }
+  50%  { transform: translateX(0%) scaleX(0.55); }
+  100% { transform: translateX(100%) scaleX(0.35); }
+}
 
 .xverim-popover {
   position: absolute;
   color: #e7e9ea;
-  /* Layered surface + hairline highlight = depth without a heavy border. */
+  /* Layered surface + hairline highlight = depth without a heavy border. The
+     blur is what keeps it from reading as a flat rectangle pasted over the
+     timeline; the gradient keeps it from reading as one of X's own dialogs. */
   background:
-    radial-gradient(120% 80% at 50% -10%, rgba(29, 155, 240, 0.10), transparent 60%),
-    linear-gradient(180deg, #1a1d21 0%, #15171b 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 12px;
-  width: 344px;
-  max-width: 344px;
-  max-height: 74vh;
+    radial-gradient(130% 90% at 50% -15%, rgba(29, 155, 240, 0.13), transparent 62%),
+    linear-gradient(180deg, rgba(24, 27, 31, 0.97) 0%, rgba(18, 20, 24, 0.97) 100%);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  padding: 12px 12px 10px;
+  width: 356px;
+  max-width: 356px;
+  max-height: 76vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    0 24px 60px rgba(0, 0, 0, 0.6),
+    0 2px 10px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   z-index: 2147483647;
   transform-origin: top left;
-  animation: xverim-pop-in 170ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: xverim-pop-in 190ms cubic-bezier(0.22, 1, 0.36, 1);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
 }
 .xverim-popover::-webkit-scrollbar { width: 6px; }
 .xverim-popover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }
+.xverim-popover-closing {
+  opacity: 0;
+  transform: translateY(4px) scale(0.985);
+  transition: opacity 120ms ease, transform 120ms ease;
+  pointer-events: none;
+}
 
 .xverim-popover-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 12px;
 }
 .xverim-popover-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-weight: 800;
-  font-size: 13.5px;
+  font-weight: 700;
+  font-size: 13px;
   letter-spacing: 0.01em;
   color: #f7f9f9;
 }
 .xverim-popover-title svg { color: #1d9bf0; }
 .xverim-popover-header-actions { display: inline-flex; gap: 2px; }
-/* Scoped so the shared .xverim-icon-btn in the panel keeps its own look. */
-.xverim-popover-header-actions .xverim-icon-btn {
+.xverim-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 26px;
   height: 26px;
   padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
   border-radius: 999px;
   color: #8b98a5;
-  transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+  transition: background 140ms ease, color 140ms ease;
 }
-.xverim-popover-header-actions .xverim-icon-btn:hover {
-  background: rgba(29, 155, 240, 0.14);
-  color: #1d9bf0;
+.xverim-icon-btn:hover { background: rgba(29, 155, 240, 0.14); color: #1d9bf0; }
+.xverim-icon-btn svg,
+.xverim-copy-btn svg,
+.xverim-draft-go svg { display: block; }
+.xverim-popover-header-actions [data-act="regen"]:active svg {
+  transform: rotate(-140deg);
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.xverim-popover-header-actions [data-act="regen"]:active svg { transform: rotate(-90deg); transition: transform 200ms ease; }
 
-.xverim-popover-content { animation: xverim-fade-in 150ms ease; }
+/* The one moving part while you wait. Sits in the layout at all times so the
+   card does not resize by 3px the moment a request starts. */
+.xverim-popover-progress {
+  height: 2px;
+  margin: 9px -12px 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.xverim-popover-progress::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, #1d9bf0, transparent);
+}
+.xverim-popover-busy .xverim-popover-progress { opacity: 1; }
+.xverim-popover-busy .xverim-popover-progress::after {
+  animation: xverim-progress 1.15s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.xverim-popover-content { animation: xverim-fade-in 160ms ease; }
 
 .xverim-popover-status { color: #8b98a5; font-size: 13px; padding: 2px 0; }
-.xverim-popover-error { color: #f4212e; word-break: break-word; }
+.xverim-popover-error {
+  color: #f4212e;
+  word-break: break-word;
+  background: rgba(244, 33, 46, 0.07);
+  border: 1px solid rgba(244, 33, 46, 0.22);
+  border-radius: 10px;
+  padding: 9px 11px;
+}
 .xverim-popover-empty {
   color: #8b98a5;
   font-size: 12.5px;
-  padding: 10px;
+  padding: 12px;
   text-align: center;
   background: rgba(255, 255, 255, 0.03);
   border: 1px dashed rgba(255, 255, 255, 0.10);
-  border-radius: 10px;
+  border-radius: 12px;
 }
 
-.xverim-popover-section { margin-bottom: 14px; }
-.xverim-popover-section:last-child { margin-bottom: 0; }
-.xverim-popover-label {
-  font-size: 10.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: #6e7b88;
-  margin-bottom: 7px;
-}
 /* Which tweet am I answering — one clamped line under the header. */
 .xverim-popover-source {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  margin-bottom: 12px;
+  margin: 10px 0 11px;
   padding: 7px 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 9px;
   border-left: 2px solid rgba(29, 155, 240, 0.55);
-  border-radius: 8px;
   font-size: 12px;
   line-height: 1.4;
   min-width: 0;
@@ -353,11 +219,22 @@
   min-width: 0;
 }
 
-.xverim-popover-hint {
-  margin-top: 8px;
-  font-size: 11px;
+.xverim-popover-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 10.5px;
   color: #5c6773;
-  text-align: center;
+  letter-spacing: 0.01em;
+}
+.xverim-popover-cost {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #6e7b88;
 }
 
 .xverim-ghost-btn {
@@ -374,44 +251,80 @@
 }
 .xverim-ghost-btn:hover { background: rgba(29, 155, 240, 0.12); border-color: rgba(29, 155, 240, 0.5); }
 
-.xverim-popover-list { margin: 0; padding-left: 0; list-style: none; color: #e7e9ea; }
-.xverim-popover-list li {
+/* ---------- One draft ---------- */
+/* The whole card is the button. Everything here works towards making that
+   obvious without shouting: it lifts on hover, the accent rail on the left
+   lights up, and the "yanıtla" affordance fades in where your eye already is. */
+.xverim-popover-list { margin: 0; padding: 0; list-style: none; color: #e7e9ea; }
+.xverim-draft {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 11px 12px;
-  margin-bottom: 9px;
-  background: rgba(255, 255, 255, 0.03);
+  gap: 9px;
+  padding: 11px 12px 10px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
-  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
-  animation: xverim-card-in 240ms ease backwards;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 160ms ease;
+  animation: xverim-card-in 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
-.xverim-popover-list li:hover {
-  background: rgba(29, 155, 240, 0.06);
-  border-color: rgba(29, 155, 240, 0.45);
+.xverim-draft::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: #1d9bf0;
+  opacity: 0;
+  transition: opacity 160ms ease;
 }
-.xverim-popover-list li:last-child { margin-bottom: 0; }
-.xverim-popover-list li:nth-child(1) { animation-delay: 30ms; }
-.xverim-popover-list li:nth-child(2) { animation-delay: 85ms; }
-.xverim-popover-list li:nth-child(3) { animation-delay: 140ms; }
-.xverim-popover-list li:nth-child(4) { animation-delay: 195ms; }
-.xverim-popover-list li:nth-child(5) { animation-delay: 250ms; }
+.xverim-draft:hover,
+.xverim-draft:focus-visible {
+  background: rgba(29, 155, 240, 0.07);
+  border-color: rgba(29, 155, 240, 0.42);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+.xverim-draft:hover::before,
+.xverim-draft:focus-visible::before { opacity: 1; }
+.xverim-draft:active { transform: translateY(0) scale(0.995); }
+/* Confirmation lives for the ~130ms before the card closes; without it a click
+   near the edge feels like it did nothing. */
+.xverim-draft-sent {
+  background: rgba(29, 155, 240, 0.16);
+  border-color: rgba(29, 155, 240, 0.7);
+}
+.xverim-draft:last-child { margin-bottom: 0; }
+.xverim-draft:nth-child(1) { animation-delay: 20ms; }
+.xverim-draft:nth-child(2) { animation-delay: 80ms; }
+.xverim-draft:nth-child(3) { animation-delay: 140ms; }
+.xverim-draft:nth-child(4) { animation-delay: 200ms; }
+.xverim-draft:nth-child(5) { animation-delay: 260ms; }
 
-/* Draft row: number chip + the editable draft itself. */
-.xverim-draft-top { display: flex; align-items: flex-start; gap: 8px; }
+.xverim-draft-top { display: flex; align-items: flex-start; gap: 9px; }
 .xverim-draft-index {
   flex: 0 0 auto;
   width: 18px;
   height: 18px;
-  margin-top: 1px;
-  border-radius: 999px;
-  background: rgba(29, 155, 240, 0.16);
-  color: #1d9bf0;
-  font: 700 10.5px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-top: 2px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #8b98a5;
+  font: 700 10px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
   text-align: center;
+  transition: background 160ms ease, color 160ms ease;
 }
-/* Editable, so a draft can be fixed where it is instead of copied out. */
+.xverim-draft:hover .xverim-draft-index {
+  background: rgba(29, 155, 240, 0.2);
+  color: #1d9bf0;
+}
+/* Editable, so a draft can be fixed where it is instead of copied out. Sized a
+   touch larger than everything around it: this is the only text on the card
+   that will actually be posted. */
 textarea.xverim-draft-text {
   flex: 1 1 auto;
   min-width: 0;
@@ -422,62 +335,64 @@ textarea.xverim-draft-text {
   margin: 0;
   resize: none;
   overflow: hidden;
+  cursor: text;
   color: #eef0f1;
-  font: 13.5px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   word-break: break-word;
 }
 textarea.xverim-draft-text:focus { color: #fff; }
 /* Translation of the draft above, dimmer and set off by a left rule. */
-.xverim-popover-angle-tr {
-  color: #8b98a5;
-  font-size: 12.5px;
+.xverim-draft-tr {
+  color: #7b8794;
+  font-size: 12px;
   line-height: 1.45;
   word-break: break-word;
   padding-left: 9px;
-  border-left: 2px solid rgba(29, 155, 240, 0.55);
+  margin-left: 27px;
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
 }
-.xverim-popover-angle-actions {
+.xverim-draft-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-left: 27px;
 }
 .xverim-char-count {
-  font-size: 11px;
+  font-size: 10.5px;
   font-variant-numeric: tabular-nums;
-  color: #5c6773;
-  padding-left: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #566370;
 }
 .xverim-char-count.xverim-char-warn { color: #ffd400; }
 .xverim-char-count.xverim-char-over { color: #f4212e; }
-.xverim-popover-btn-group { display: inline-flex; align-items: center; gap: 6px; }
 
-.xverim-reply-btn {
+/* Not a button — the card is. This only names what a click will do, and it is
+   invisible until you are already pointing at the card. */
+.xverim-draft-go {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: linear-gradient(180deg, #1d9bf0 0%, #1a8cd8 100%);
-  color: #fff;
-  border: 0;
-  border-radius: 999px;
-  font: 700 12.5px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  padding: 7px 15px;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  transition: filter 140ms ease, transform 120ms ease, box-shadow 140ms ease;
+  margin-left: auto;
+  color: #1d9bf0;
+  font: 700 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 160ms ease, transform 160ms ease;
+  pointer-events: none;
 }
-.xverim-reply-btn:hover { filter: brightness(1.08); box-shadow: 0 3px 12px rgba(29, 155, 240, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.14); }
-.xverim-reply-btn:active { transform: scale(0.96); }
+.xverim-draft:hover .xverim-draft-go,
+.xverim-draft:focus-visible .xverim-draft-go { opacity: 1; transform: translateX(0); }
 
 .xverim-copy-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   background: transparent;
   border: 0;
-  color: #8b98a5;
+  color: #566370;
   padding: 0;
   line-height: 1;
   cursor: pointer;
@@ -485,19 +400,22 @@ textarea.xverim-draft-text:focus { color: #fff; }
   flex-shrink: 0;
   transition: background 140ms ease, color 140ms ease;
 }
-.xverim-copy-btn:hover { background: rgba(255, 255, 255, 0.08); color: #e7e9ea; }
+.xverim-copy-btn:hover { background: rgba(255, 255, 255, 0.09); color: #e7e9ea; }
 .xverim-copy-btn.xverim-copy-ok { color: #00ba7c; background: rgba(0, 186, 124, 0.14); }
 
-/* Loading skeleton */
-.xverim-skeleton { padding: 2px 0; }
-.xverim-sk-line, .xverim-sk-card {
-  border-radius: 8px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%);
+/* Loading skeleton — same geometry as a real draft card, so the swap from
+   shimmer to text moves nothing. */
+.xverim-skeleton { padding: 0; }
+.xverim-sk-card {
+  height: 78px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.035) 25%, rgba(255,255,255,0.085) 50%, rgba(255,255,255,0.035) 75%);
   background-size: 680px 100%;
   animation: xverim-shimmer 1.25s ease-in-out infinite;
 }
-.xverim-sk-line { height: 10px; margin-bottom: 9px; }
-.xverim-sk-card { height: 74px; margin-bottom: 9px; border-radius: 12px; }
+.xverim-sk-card:nth-child(2) { animation-delay: 120ms; }
+.xverim-sk-card:nth-child(3) { animation-delay: 240ms; }
 .xverim-sk-card:last-child { margin-bottom: 0; }
 
 /* ---------- Toasts ---------- */
@@ -516,11 +434,13 @@ textarea.xverim-draft-text:focus { color: #fff; }
 }
 .xverim-toast {
   max-width: 320px;
-  background: #1a1d21;
+  background: rgba(26, 29, 33, 0.96);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   color: #e7e9ea;
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-left: 3px solid #1d9bf0;
-  border-radius: 10px;
+  border-radius: 11px;
   padding: 9px 13px;
   font: 12.5px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -532,52 +452,18 @@ textarea.xverim-draft-text:focus { color: #fff; }
 .xverim-toast-error { border-left-color: #f4212e; }
 .xverim-toast-out { opacity: 0; transform: translateY(4px); transition: opacity 160ms ease, transform 160ms ease; }
 
-/* ---------- Guardrail banner ---------- */
-.xverim-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  background: #1d9bf0;
-  color: #fff;
-  padding: 8px 12px;
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  z-index: 2147483647;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-.xverim-banner-text { flex: 1; display: inline-flex; align-items: center; gap: 6px; }
-.xverim-banner-icon { display: inline-block; vertical-align: middle; }
-.xverim-icon-btn svg,
-.xverim-banner-close svg,
-.xverim-reply-btn svg,
-.xverim-copy-btn svg { display: block; }
-.xverim-banner-close {
-  background: transparent;
-  border: 0;
-  color: #fff;
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 6px;
-  border-radius: 4px;
-}
-.xverim-banner-close:hover { background: rgba(255, 255, 255, 0.18); }
-
 /* ---------- Focus rings ---------- */
 /* Keyboard users get a visible target inside our own surfaces; mouse users
    don't, and X's own focus styling is untouched. */
-.xverim-panel button:focus-visible,
-.xverim-panel input:focus-visible,
-.xverim-panel summary:focus-visible,
 .xverim-popover button:focus-visible,
 .xverim-popover textarea:focus-visible {
   outline: 2px solid #1d9bf0;
   outline-offset: 2px;
   border-radius: 6px;
 }
+/* The card draws its own hover/focus treatment; a second ring on top of it is
+   noise, so only the outline offset is borrowed. */
+.xverim-draft:focus-visible { outline: none; }
 
 /* ---------- Reduced motion ---------- */
 /* Scoped to our own elements: `*` here also switched off every animation on
@@ -586,9 +472,7 @@ textarea.xverim-draft-text:focus { color: #fff; }
   .xverim-active-mark, .xverim-active-mark *,
   .xverim-toasts, .xverim-toasts *,
   .xverim-popover, .xverim-popover *,
-  .xverim-panel, .xverim-panel *,
-  .xverim-banner, .xverim-banner *,
-  .xverim-focused, .xverim-dim, .xverim-highlight {
+  .xverim-focused {
     transition: none !important;
     animation: none !important;
   }

@@ -14,40 +14,35 @@
         <path d="M7 7 L17 17 M17 7 L7 17" stroke="#fff" stroke-width="2.4" stroke-linecap="round" />
       </svg>
       <span class="xverim-popup-title">X Verim</span>
-      <span class="xverim-popup-tag">kişisel</span>
+      <span class="xverim-popup-tag" id="model-tag">kişisel</span>
     </header>
 
-    <section class="xverim-card" data-card="filters">
-      <label class="xverim-toggle">
-        <input type="checkbox" id="filter-enabled" />
-        <span>Niş filtresi açık</span>
-      </label>
-      <p class="xverim-card-hint" id="filter-hint">Zaman tünelindeki panelle çift yönlü senkron.</p>
-    </section>
-
-    <section class="xverim-card" data-card="suggest">
-      <div class="xverim-card-label">Gönderi fikirleri</div>
-      <input type="text" id="suggest-topic" placeholder="Konu — boş bırakırsan niş kullanılır" />
-      <div class="xverim-row">
-        <label class="xverim-field">
-          <span class="xverim-field-label">Adet</span>
-          <input type="number" id="suggest-count" min="1" max="10" value="5" />
-        </label>
-        <label class="xverim-field xverim-field-grow">
-          <span class="xverim-field-label">Açı</span>
-          <select id="suggest-style">
-            <option value="mixed">Karışık</option>
-            <option value="opinion">Görüş / net duruş</option>
-            <option value="lesson">Öğrenilen ders</option>
-            <option value="question">Zaman tüneline soru</option>
-            <option value="story">Kısa an / anekdot</option>
-            <option value="observation">Gözlem</option>
-          </select>
-        </label>
-        <button class="xverim-btn primary" id="suggest-go" type="button">Üret</button>
+    <section class="xverim-card xverim-cost" data-card="cost">
+      <div class="xverim-cost-head">
+        <div class="xverim-card-label">Toplam maliyet</div>
+        <button class="xverim-linkbtn" id="cost-reset" type="button" title="Sayacı sıfırla">sıfırla</button>
       </div>
-      <p class="xverim-card-hint">Enter ya da &#8984;/Ctrl + Enter üretir. Kartlar düzenlenebilir.</p>
-      <div class="xverim-result" id="suggest-result"></div>
+      <div class="xverim-cost-total" id="cost-total">$0.0000</div>
+      <div class="xverim-cost-sub" id="cost-sub">henüz taslak üretilmedi</div>
+
+      <div class="xverim-cost-grid">
+        <div class="xverim-stat">
+          <span class="xverim-stat-label">Bugün</span>
+          <b class="xverim-stat-value" id="cost-today">$0.0000</b>
+          <span class="xverim-stat-foot" id="cost-today-calls">0 taslak</span>
+        </div>
+        <div class="xverim-stat">
+          <span class="xverim-stat-label">Taslak başına</span>
+          <b class="xverim-stat-value" id="cost-avg">—</b>
+          <span class="xverim-stat-foot" id="cost-last">son: —</span>
+        </div>
+      </div>
+
+      <div class="xverim-spark" id="cost-spark" aria-hidden="true"></div>
+      <div class="xverim-spark-axis"><span>7 gün önce</span><span>bugün</span></div>
+
+      <div class="xverim-tokens" id="cost-tokens"></div>
+      <p class="xverim-card-hint" id="cost-rates"></p>
     </section>
 
     <section class="xverim-card" data-card="schedule">
@@ -63,7 +58,7 @@
         <button class="xverim-btn small primary" id="sched-sync" type="button">JSON planını X'e aktar</button>
       </div>
       <p class="xverim-card-hint">Sistem yalnızca JSON'daki kesin metin ve tarih-saatleri kullanır; kendi başına mesaj, gün veya saat üretmez. X'e kaydolduktan sonra bilgisayar kapalıyken de paylaşılır.</p>
-      <details class="xverim-sched-io" open>
+      <details class="xverim-sched-io">
         <summary>Plan JSON'u</summary>
         <textarea id="sched-json" rows="5" spellcheck="false" placeholder='{"posts":[{"at":"2026-07-28T10:27:00+03:00","text":"günaydın"}]}' aria-label="Kesin tarihli plan JSON'u"></textarea>
         <div class="xverim-sched-io-actions">
@@ -73,22 +68,10 @@
       </details>
     </section>
 
-    <section class="xverim-card" data-card="counters">
-      <div class="xverim-card-label">Son 60 dakika</div>
-      <div class="xverim-meter-row">
-        <div class="xverim-meter-head"><span>Beğeni</span><span><b id="cnt-likes">0</b><span id="lim-likes"></span></span></div>
-        <div class="xverim-meter"><i id="bar-likes"></i></div>
-      </div>
-      <div class="xverim-meter-row">
-        <div class="xverim-meter-head"><span>Takip</span><span><b id="cnt-follows">0</b><span id="lim-follows"></span></span></div>
-        <div class="xverim-meter"><i id="bar-follows"></i></div>
-      </div>
-    </section>
-
     <div class="xverim-status" id="popup-status" role="status" aria-live="polite"></div>
 
     <footer class="xverim-popup-footer">
-      <span>Yanıt taslakları zaman tünelinde: bir tweet seç ve <b>A</b>'ya bas</span>
+      <span>Zaman tünelinde <b>J</b> / <b>K</b> ile gez, <b>A</b> ile taslak üret</span>
     </footer>
   </main>
   <script src="popup.js"></script>

@@ -1,4 +1,4 @@
-﻿// Copy this file to config.js and fill it in. config.js is gitignored — the
+// Copy this file to config.js and fill it in. config.js is gitignored — the
 // key stays on your machine. Both worlds read the same object: the background
 // service worker via self.XVERIM_CONFIG, the content script via window.
 //
@@ -11,8 +11,8 @@
     // ---- Model ----
     DEEPSEEK_API_KEY: "PASTE_YOUR_KEY_HERE",
     DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
-    DEEPSEEK_MODEL: "deepseek-chat",
-    AI_TEMPERATURE: 0.8,
+    DEEPSEEK_MODEL: "deepseek-v4-flash",
+    AI_TEMPERATURE: 0.9,
     AI_FREQUENCY_PENALTY: 0.3, // keeps a batch of drafts from settling into one template; above 0.5 it starts mangling word choice
     AI_TIMEOUT_MS: 45000,      // give up on a stalled request instead of shimmering forever
 
@@ -21,14 +21,18 @@
     PERSONA: {
       identity: "Software engineer in Istanbul, builds small tools, follows football.",
       niche: ["yazılım", "yapay zeka", "ürün"],
-      tone: "Direct, dry, a bit sarcastic. Short sentences.",
+      // Avoid the word "samimi" here. The model reads it as an instruction to
+      // perform warmth at strangers, which is the single thing that makes a
+      // draft unpostable. Say "resmi değil" if that is what you mean.
+      tone: "Gündelik ve doğrudan, resmi değil. Kısa cümleler, ölçülü ironi.",
       language: "auto",        // "auto" mirrors the tweet's language; or e.g. "Türkçe"
       avoid: [
         "motivational closers",
         "emoji"
       ],
       // Optional but the single biggest quality lever: a handful of tweets you
-      // actually wrote. The model copies the rhythm, never the content.
+      // actually wrote. The model copies the rhythm, never the content. Pick the
+      // most offhand ones you can find, not the polished ones.
       samples: [
         // "bunu üç kere denedim, üçünde de aynı yerde patladı"
       ]
@@ -41,33 +45,23 @@
     },
 
     // ---- Keyboard ----
-    // Any action left out falls back to the default shown here. Set one to ""
-    // to switch it off.
+    // Three keys, and that is the whole surface. Set one to "" to switch it off.
     SHORTCUTS: {
       focusNext: "j",
       focusPrev: "k",
-      like: "l",
-      bookmark: "s",
-      followAuthor: "f",
-      replyWithDraft: "r",
-      analyze: "a",
-      togglePanel: "v"
+      analyze: "a"
     },
 
-    // ---- Timeline filter ----
-    FILTER: {
-      enabled: true,
-      hideMode: "dim",         // "dim" or "hide" for keywordsExclude matches
-      keywordsInclude: [],     // highlight tweets containing these
-      keywordsExclude: [],     // dim/hide tweets containing these
-      mutedAuthors: [],        // handles, with or without the @
-      highlightMinLikes: 0     // 0 = off
-    },
-
-    // ---- Pace guardrail (warns, never blocks) ----
-    GUARDRAILS: {
-      warnLikesPerHour: 60,
-      warnFollowsPerHour: 20
+    // ---- Cost counter ----
+    // DeepSeek's published per-million-token rates, used to price the usage
+    // readout in the popup. Cached input is ~50x cheaper than a cache miss, so
+    // the three are tracked separately rather than blended.
+    // usdTry is optional: set it and the popup shows a ₺ figure next to the $.
+    PRICING: {
+      inputPerMTok: 0.14,
+      cachedInputPerMTok: 0.0028,
+      outputPerMTok: 0.28,
+      usdTry: 0
     }
   };
 })(typeof self !== "undefined" ? self : this);
