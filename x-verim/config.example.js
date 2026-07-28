@@ -13,6 +13,7 @@
     DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
     DEEPSEEK_MODEL: "deepseek-chat",
     AI_TEMPERATURE: 0.8,
+    AI_FREQUENCY_PENALTY: 0.3, // keeps a batch of drafts from settling into one template; above 0.5 it starts mangling word choice
     AI_TIMEOUT_MS: 45000,      // give up on a stalled request instead of shimmering forever
 
     // ---- Who you are ----

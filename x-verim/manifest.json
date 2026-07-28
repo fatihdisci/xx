@@ -3,7 +3,7 @@
   "name": "X Verim",
   "version": "0.1.0",
   "description": "Personal accelerator for X — keyboard shortcuts, niche filter, AI assist, scheduled posts. The only automation is what you schedule yourself.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "https://x.com/*",
     "https://abs.twimg.com/*",
@@ -19,6 +19,7 @@
       "js": [
         "config.js",
         "lib/x-dom.js",
+        "lib/x-transaction.js",
         "content/content.js"
       ],
       "css": [

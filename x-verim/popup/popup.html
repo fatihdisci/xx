@@ -52,21 +52,23 @@
 
     <section class="xverim-card" data-card="schedule">
       <div class="xverim-sched-head">
-        <div class="xverim-card-label">Gönderi planlama</div>
+        <div class="xverim-card-label">Kesin tarihli plan</div>
         <label class="xverim-toggle">
           <input type="checkbox" id="sched-enabled" />
           <span>Açık</span>
         </label>
       </div>
-      <div id="sched-rules"></div>
-      <button class="xverim-btn small" id="sched-add" type="button">+ Kural ekle</button>
-      <p class="xverim-card-hint">Her satıra bir mesaj yaz. Kural, eşleşen her gün seçtiğin aralıkta rastgele bir dakikaya X'in kendi planlayıcısına kaydedilir — kaydolduktan sonra bilgisayar kapalıyken de paylaşılır.</p>
-      <details class="xverim-sched-io">
-        <summary>İçe / dışa aktar</summary>
-        <textarea id="sched-json" rows="4" spellcheck="false" placeholder="Kural JSON'unu buraya yapıştır ve Yükle'ye bas" aria-label="Kural JSON'u"></textarea>
+      <div id="sched-calendar"></div>
+      <div class="xverim-sched-actions">
+        <button class="xverim-btn small primary" id="sched-sync" type="button">JSON planını X'e aktar</button>
+      </div>
+      <p class="xverim-card-hint">Sistem yalnızca JSON'daki kesin metin ve tarih-saatleri kullanır; kendi başına mesaj, gün veya saat üretmez. X'e kaydolduktan sonra bilgisayar kapalıyken de paylaşılır.</p>
+      <details class="xverim-sched-io" open>
+        <summary>Plan JSON'u</summary>
+        <textarea id="sched-json" rows="5" spellcheck="false" placeholder='{"posts":[{"at":"2026-07-28T10:27:00+03:00","text":"günaydın"}]}' aria-label="Kesin tarihli plan JSON'u"></textarea>
         <div class="xverim-sched-io-actions">
-          <button class="xverim-btn small" id="sched-export" type="button">Mevcutları yaz</button>
-          <button class="xverim-btn small primary" id="sched-import" type="button">Yükle</button>
+          <button class="xverim-btn small" id="sched-export" type="button">Mevcut JSON'u yaz</button>
+          <button class="xverim-btn small primary" id="sched-import" type="button">JSON'u yükle</button>
         </div>
       </details>
     </section>

@@ -3,6 +3,8 @@
 (function () {
   "use strict";
 
+  var EXPECTED_SCHEDULER_VERSION = 7;
+
   function $(id) { return document.getElementById(id); }
 
   function bgRequest(msg) {
@@ -22,11 +24,101 @@
 
   function activeXTab() {
     return new Promise(function (resolve) {
+      // Safari intermittently returns no rows when `url` is included in the
+      // query, even though x.com is in host_permissions. Ask only for the
+      // active tab; the content-script handshake below is the authoritative
+      // proof that it is an X tab running X Verim.
+      function pick(tabs) {
+        return tabs && tabs[0] && tabs[0].id != null ? tabs[0] : null;
+      }
+      function fallback() {
+        try {
+          chrome.tabs.query({ active: true }, function (tabs) {
+            resolve(pick(tabs));
+          });
+        } catch (_) { resolve(null); }
+      }
       try {
-        chrome.tabs.query({ active: true, currentWindow: true, url: "https://x.com/*" }, function (tabs) {
-          resolve(tabs && tabs[0] ? tabs[0] : null);
+        chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+          var tab = pick(tabs);
+          if (tab) resolve(tab);
+          else fallback();
         });
-      } catch (_) { resolve(null); }
+      } catch (_) { fallback(); }
+    });
+  }
+
+  async function syncScheduleNow(successMessage) {
+    if (!schedPlan.enabled) {
+      setStatus("JSON planı yüklü ama aktarım kapalı. Üstteki Açık anahtarını aç.", "warn", 0);
+      return false;
+    }
+    if (!schedPlan.posts.length) {
+      setStatus("Önce kesin tarihli posts dizisi içeren JSON'u yükle.", "warn", 0);
+      return false;
+    }
+    var tab = await activeXTab();
+    if (!tab) {
+      setStatus("Bir x.com sekmesi aç; planlar X'e o sekmeden kaydedilecek.", "warn", 0);
+      return false;
+    }
+    return new Promise(function (resolve) {
+      try {
+        var syncButton = $("sched-sync");
+        if (syncButton) {
+          syncButton.disabled = true;
+          syncButton.textContent = "X kontrol ediliyor…";
+        }
+        chrome.tabs.sendMessage(tab.id, { type: "SCHEDULE_SYNC_NOW" }, function (resp) {
+          var lastError = chrome.runtime.lastError;
+          if (syncButton) {
+            syncButton.disabled = false;
+            syncButton.textContent = "Şimdi X'e kaydet";
+          }
+          // Safari can leave a benign lastError even though a response arrived.
+          // A valid version handshake wins.
+          if (resp && resp.ok) {
+            if (Number(resp.schedulerVersion) !== EXPECTED_SCHEDULER_VERSION) {
+              setStatus("Safari hâlâ eski X Verim paketini çalıştırıyor (v" + (resp.schedulerVersion || "?") + "). Safari Ayarları → Eklentiler → X Verim'i kapatıp yeniden aç; sonra x.com'u yenile.", "error", 0);
+              resolve(false);
+              return;
+            }
+            if (resp.cooldownUntil) {
+              var waitUntil = new Date(resp.cooldownUntil);
+              var hh = (waitUntil.getHours() < 10 ? "0" : "") + waitUntil.getHours();
+              var mm = (waitUntil.getMinutes() < 10 ? "0" : "") + waitUntil.getMinutes();
+              if (resp.cooldownReason === "paced") {
+                setStatus("Kayıt başarılı. X'te toplam " + (resp.booked || 0) + " plan var; sıradaki kayıt denemesi " + hh + ":" + mm + " sonrasında.", null, 0);
+              } else if (resp.cooldownReason === "calendar-paced") {
+                setStatus("60 günlük takvim aktarılıyor: " + (resp.calendarBooked || 0) + "/" +
+                  (resp.calendarTotal || 0) + " X'e kayıtlı. Sonraki kayıt " + hh + ":" + mm + " sonrasında.", null, 0);
+              } else {
+                setStatus("X yeni kayıtları geçici olarak reddetti: " + (resp.error || resp.cooldownReason || "403 Forbidden") + ". Planlayıcı " + hh + ":" + mm + " sonrasında otomatik devam edecek.", "warn", 0);
+              }
+            } else if (resp.busy) {
+              setStatus("X yanıtı 20 saniyede tamamlanmadı. Düğmeye tekrar basma; JSON planı sayacını ve X listesini kontrol et.", "warn", 0);
+            } else if (resp.error) {
+              setStatus("X'e kaydedilemedi: " + resp.error, "error", 0);
+            } else if (resp.booked > 0) {
+              setStatus("Kayıt tamamlandı. X'te toplam " + resp.booked + " gelecek plan yerel olarak doğrulandı.", null, 0);
+            } else {
+              setStatus(successMessage || "Yeni kayıt oluşturulmadı. JSON tarihlerini ve aktarım anahtarını kontrol et.", "warn", 0);
+            }
+            resolve(true);
+            return;
+          }
+          var detail = String((lastError && lastError.message) || "");
+          if (/receiv|connection|message port|end does not exist/i.test(detail)) {
+            setStatus("x.com sekmesi eklentiye bağlı değil. Sayfayı yenile, sonra yeniden dene.", "error", 0);
+          } else {
+            setStatus("x.com sekmesine ulaşılamadı" + (detail ? ": " + detail : ".") , "error", 0);
+          }
+          resolve(false);
+        });
+      } catch (_) {
+        setStatus("x.com sekmesine ulaşılamadı. Sayfayı yenile ve tekrar dene.", "error", 0);
+        resolve(false);
+      }
     });
   }
 
@@ -263,32 +355,39 @@
   }
 
   // ---- Gönderi planlama ----
-  // The popup owns the plan (master switch + rules); the content script owns
-  // the runtime state (what fired today) under a separate key, so a save here
-  // can never clobber an in-flight post over there.
+  // The popup owns the exact JSON plan; the content script owns only the
+  // runtime state, so replacing a JSON file cannot clobber an in-flight claim.
   var SCHED_RULES_KEY = "xverim_schedule_v1";
   var SCHED_STATE_KEY = "xverim_schedule_state_v1";
-  var schedPlan = { enabled: false, rules: [] };
+  var BUNDLED_PLAN_URL = "planlama-60-gun.json";
+  var schedPlan = { enabled: false, posts: [], jsonOnlyV7: false };
   var schedState = {};
-  var schedSaveTimer = null;
 
-  var SCHED_DAYS = [
-    ["all", "Her gün"], ["wd", "Hafta içi"], ["we", "Hafta sonu"],
-    ["1", "Pazartesi"], ["2", "Salı"], ["3", "Çarşamba"], ["4", "Perşembe"],
-    ["5", "Cuma"], ["6", "Cumartesi"], ["0", "Pazar"]
-  ];
+  function schedStableHash(value) {
+    var hash = 2166136261;
+    for (var i = 0; i < value.length; i++) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
 
-  function schedSaveNow() {
+  function schedTimeZoneName() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "local"; }
+    catch (_) { return "local"; }
+  }
+
+  function schedSaveNow(done) {
     var obj = {};
     obj[SCHED_RULES_KEY] = schedPlan;
-    try { chrome.storage.local.set(obj); } catch (_) {}
+    try {
+      chrome.storage.local.set(obj, function () {
+        if (typeof done === "function") done();
+      });
+    } catch (_) {
+      if (typeof done === "function") done();
+    }
   }
-  // Debounced: every keystroke in a messages box is a change event.
-  function schedSave() {
-    if (schedSaveTimer) clearTimeout(schedSaveTimer);
-    schedSaveTimer = setTimeout(schedSaveNow, 400);
-  }
-
   var SCHED_TR_DAYS = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
   function schedWhen(ms) {
     var d = new Date(ms);
@@ -302,236 +401,89 @@
   }
   // One line under each rule, so the only proof the plan is live isn't the
   // tweet showing up days later. Reads the slots actually lodged with X.
-  function schedStatusText(rule) {
-    if (!rule.enabled) return "kapalı";
+  function schedRenderCalendar() {
+    var root = $("sched-calendar");
+    if (!root) return;
+    root.innerHTML = "";
+    if (!schedPlan.posts.length) return;
+
     var now = Date.now();
-    var soonest = null, booked = 0, failed = null;
-    for (var k in schedState) {
-      var st = schedState[k];
-      if (!st || st.rule !== rule.id) continue;
-      if (st.error && !failed) failed = st.error;
-      if (!st.ok || st.at <= now) continue;
-      booked++;
-      if (soonest == null || st.at < soonest) soonest = st.at;
+    var booked = 0;
+    for (var i = 0; i < schedPlan.posts.length; i++) {
+      var stateItem = schedState["post@" + schedPlan.posts[i].id];
+      if (stateItem && stateItem.ok) booked++;
     }
-    if (soonest != null) {
-      return "X'e kayıtlı · sıradaki " + schedWhen(soonest) + (booked > 1 ? " (+" + (booked - 1) + ")" : "");
-    }
-    if (failed) return "kaydedilemedi: " + failed;
-    return "sıraya alınacak";
-  }
-
-  function schedNewRule() {
-    return {
-      id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      enabled: true,
-      label: "",
-      days: "all",
-      start: "09:00",
-      end: "12:00",
-      order: "bag",
-      skip: 15,
-      messages: ""
-    };
-  }
-
-  function schedRuleEl(rule) {
+    var first = Date.parse(schedPlan.posts[0].at);
+    var last = Date.parse(schedPlan.posts[schedPlan.posts.length - 1].at);
     var wrap = document.createElement("div");
-    wrap.className = "xverim-sched-rule";
-
+    wrap.className = "xverim-sched-calendar";
     var head = document.createElement("div");
-    head.className = "xverim-sched-row";
-
-    var on = document.createElement("input");
-    on.type = "checkbox";
-    on.checked = !!rule.enabled;
-    on.title = "Bu kural açık / kapalı";
-    on.addEventListener("change", function () {
-      rule.enabled = on.checked;
-      refreshMsgCount();
-      schedSave();
+    head.className = "xverim-sched-calendar-head";
+    var title = document.createElement("span");
+    title.textContent = "Kesin tarihli JSON planı";
+    var remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "xverim-btn small";
+    remove.textContent = "Kaldır";
+    remove.addEventListener("click", function () {
+      if (!window.confirm("Hazır takvim kaldırılacak. X'e daha önce kaydedilen gönderiler X'ten silinmez. Devam?")) return;
+      schedPlan.posts = [];
+      schedSaveNow();
+      schedRenderCalendar();
+      setStatus("JSON planı kaldırıldı.", null, 3000);
     });
-
-    var label = document.createElement("input");
-    label.type = "text";
-    label.className = "xverim-sched-label";
-    label.placeholder = "Ad (örn. Günaydın)";
-    label.value = rule.label || "";
-    label.addEventListener("input", function () { rule.label = label.value; schedSave(); });
-
-    var del = document.createElement("button");
-    del.type = "button";
-    del.className = "xverim-btn small";
-    del.textContent = "Sil";
-    del.addEventListener("click", function () {
-      schedPlan.rules = schedPlan.rules.filter(function (r) { return r !== rule; });
-      schedRender();
-      schedSave();
-    });
-
-    head.appendChild(on);
-    head.appendChild(label);
-    head.appendChild(del);
-
-    // Two rows: 380px minus paddings can't fit day + window + order side by
-    // side without crushing the day select into an unreadable sliver.
-    var when = document.createElement("div");
-    when.className = "xverim-sched-row";
-    var when2 = document.createElement("div");
-    when2.className = "xverim-sched-row";
-
-    var days = document.createElement("select");
-    days.className = "xverim-sched-days";
-    for (var i = 0; i < SCHED_DAYS.length; i++) {
-      var opt = document.createElement("option");
-      opt.value = SCHED_DAYS[i][0];
-      opt.textContent = SCHED_DAYS[i][1];
-      days.appendChild(opt);
-    }
-    days.value = rule.days || "all";
-    days.addEventListener("change", function () { rule.days = days.value; schedSave(); });
-
-    var start = document.createElement("input");
-    start.type = "time";
-    start.value = rule.start || "09:00";
-    start.addEventListener("change", function () { rule.start = start.value; schedSave(); });
-
-    var dash = document.createElement("span");
-    dash.className = "xverim-sched-dash";
-    dash.textContent = "–";
-
-    var end = document.createElement("input");
-    end.type = "time";
-    end.value = rule.end || "12:00";
-    end.addEventListener("change", function () { rule.end = end.value; schedSave(); });
-
-    var order = document.createElement("select");
-    order.className = "xverim-sched-order";
-    order.title = "Mesaj sırası";
-    [["bag", "Tekrarsız"], ["random", "Rastgele"], ["sequential", "Sırayla"]].forEach(function (o) {
-      var opt = document.createElement("option");
-      opt.value = o[0];
-      opt.textContent = o[1];
-      order.appendChild(opt);
-    });
-    order.value = rule.order || "bag";
-    order.addEventListener("change", function () { rule.order = order.value; schedSave(); });
-
-    // Never missing a day is the giveaway, so skipping some is a feature.
-    var skip = document.createElement("select");
-    skip.className = "xverim-sched-order";
-    skip.title = "Bazı günleri atlama oranı";
-    [["0", "Hiç atlama"], ["15", "%15 atla"], ["25", "%25 atla"], ["40", "%40 atla"]].forEach(function (o) {
-      var opt = document.createElement("option");
-      opt.value = o[0];
-      opt.textContent = o[1];
-      skip.appendChild(opt);
-    });
-    skip.value = String(Number(rule.skip) || 0);
-    skip.addEventListener("change", function () { rule.skip = Number(skip.value) || 0; schedSave(); });
-
-    when.appendChild(days);
-    when.appendChild(order);
-    when2.appendChild(start);
-    when2.appendChild(dash);
-    when2.appendChild(end);
-    when2.appendChild(skip);
-
-    var msgs = document.createElement("textarea");
-    msgs.className = "xverim-sched-msgs";
-    msgs.placeholder = "Her satıra bir mesaj:\nGünaydın\nHayırlı sabahlar";
-    msgs.value = rule.messages || "";
-    msgs.rows = 3;
-    msgs.spellcheck = false;
-    msgs.setAttribute("aria-label", "Mesajlar, her satıra bir tane");
-    // Enter inserts a newline (the separator), so it must not reach the
-    // popup-wide Cmd/Ctrl+Enter generate shortcut or the topic field.
-    msgs.addEventListener("keydown", function (e) { e.stopPropagation(); });
-
-    var count = document.createElement("div");
-    count.className = "xverim-sched-status";
-    function refreshMsgCount() {
-      var n = String(msgs.value || "").split(/[\n|]+/)
-        .map(function (s) { return s.trim(); }).filter(Boolean).length;
-      count.textContent = n ? (n + " mesaj · " + schedStatusText(rule)) : schedStatusText(rule);
-    }
-    msgs.addEventListener("input", function () {
-      rule.messages = msgs.value;
-      refreshMsgCount();
-      schedSave();
-    });
-
-    var status = count;
-    refreshMsgCount();
-
+    var status = document.createElement("div");
+    status.className = "xverim-sched-status";
+    status.textContent = booked + "/" + schedPlan.posts.length + " X'e kayıtlı · " +
+      schedWhen(first) + " – " + schedWhen(last) +
+      (last < now ? " · tamamlandı" : " · tek oturumda otomatik aktarılır");
+    head.appendChild(title);
+    head.appendChild(remove);
     wrap.appendChild(head);
-    wrap.appendChild(when);
-    wrap.appendChild(when2);
-    wrap.appendChild(msgs);
     wrap.appendChild(status);
-    // Lets a live state update repaint just this line, instead of re-rendering
-    // the list out from under someone who is mid-sentence in the textarea.
-    wrap.xvRefresh = refreshMsgCount;
-    return wrap;
+    root.appendChild(wrap);
   }
 
   function schedRender() {
-    var root = $("sched-rules");
-    if (!root) return;
-    root.innerHTML = "";
-    if (!schedPlan.rules.length) {
-      var empty = document.createElement("div");
-      empty.className = "xverim-empty";
-      empty.textContent = "Henüz kural yok. Örnek: Günaydın kuralı, 07:00–10:00.";
-      root.appendChild(empty);
-      return;
-    }
-    for (var i = 0; i < schedPlan.rules.length; i++) {
-      root.appendChild(schedRuleEl(schedPlan.rules[i]));
-    }
+    schedRenderCalendar();
   }
 
   function schedRefreshStatuses() {
-    var root = $("sched-rules");
-    if (!root) return;
-    for (var i = 0; i < root.children.length; i++) {
-      var el = root.children[i];
-      if (typeof el.xvRefresh === "function") el.xvRefresh();
-    }
+    schedRenderCalendar();
   }
 
-  // Typing fifty lines through a 380px popup is not a thing anyone should do,
-  // so rules go in and out as JSON. Import replaces the rule list wholesale
-  // and is deliberately loud about it: it is the one destructive button here.
-  var SCHED_DAY_VALUES = { all: 1, wd: 1, we: 1, 0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1 };
-  function schedNormalizeRule(raw, i) {
-    if (!raw || typeof raw !== "object") throw new Error((i + 1) + ". kural bir nesne değil");
-    var messages = raw.messages;
-    if (Array.isArray(messages)) messages = messages.join("\n");
-    messages = String(messages == null ? "" : messages);
-    if (!messages.split(/[\n|]+/).some(function (s) { return s.trim(); })) {
-      throw new Error((i + 1) + ". kuralda hiç mesaj yok");
-    }
-    var start = String(raw.start || "").trim(), end = String(raw.end || "").trim();
-    if (!/^\d{1,2}:\d{2}$/.test(start) || !/^\d{1,2}:\d{2}$/.test(end)) {
-      throw new Error((i + 1) + ". kuralın saati SS:DD olmalı");
-    }
-    var days = String(raw.days == null ? "all" : raw.days);
-    if (!SCHED_DAY_VALUES[days]) throw new Error((i + 1) + ". kuralın gün değeri geçersiz: " + days);
+  // The JSON is the plan. Import validates every exact timestamp and message,
+  // then replaces the local list without altering anything already stored at X.
+  function schedNormalizePost(raw, i) {
+    if (!raw || typeof raw !== "object") throw new Error((i + 1) + ". gönderi bir nesne değil");
+    var text = String(raw.text == null ? (raw.message == null ? "" : raw.message) : raw.text).trim();
+    if (!text) throw new Error((i + 1) + ". gönderinin metni boş");
+    if (text.length > 280) throw new Error((i + 1) + ". gönderi 280 karakteri aşıyor");
+    var at = typeof raw.at === "number" ? raw.at : Date.parse(String(raw.at || ""));
+    if (!isFinite(at)) throw new Error((i + 1) + ". gönderinin tarih-saat değeri geçersiz");
+    var suppliedId = String(raw.id || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
     return {
-      // A fresh id per import: reusing one would inherit the old rule's
-      // already-registered days and silently skip the new content.
-      id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + i,
-      enabled: raw.enabled !== false,
-      label: String(raw.label || "").slice(0, 60),
-      days: days,
-      start: start,
-      end: end,
-      order: (raw.order === "random" || raw.order === "sequential") ? raw.order : "bag",
-      skip: Math.max(0, Math.min(90, Number(raw.skip) || 0)),
-      messages: messages
+      id: suppliedId || ("post-" + schedStableHash(at + "!" + text)),
+      at: new Date(at).toISOString(),
+      text: text,
+      label: String(raw.label || "Hazır takvim").slice(0, 60)
     };
   }
+
+  function schedNormalizePosts(list) {
+    if (!Array.isArray(list)) throw new Error("JSON nesnesinde kesin tarihli bir posts dizisi olmalı");
+    var posts = [];
+    for (var p = 0; p < list.length; p++) posts.push(schedNormalizePost(list[p], p));
+    posts.sort(function (a, b) { return Date.parse(a.at) - Date.parse(b.at); });
+    if (!posts.length) throw new Error("JSON planında hiç gönderi yok");
+    var ids = {};
+    for (var n = 0; n < posts.length; n++) {
+      if (ids[posts[n].id]) throw new Error("JSON planında yinelenen gönderi kimliği var: " + posts[n].id);
+      ids[posts[n].id] = true;
+    }
+    return posts;
+  }
+
   function schedImport() {
     var box = $("sched-json");
     var text = String(box.value || "").trim();
@@ -539,34 +491,62 @@
     var parsed;
     try { parsed = JSON.parse(text); }
     catch (e) { setStatus("JSON okunamadı: " + String((e && e.message) || e), "error", 0); return; }
-    var list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.rules) ? parsed.rules : null);
-    if (!list || !list.length) { setStatus("JSON içinde kural dizisi yok.", "error", 0); return; }
-    var rules = [];
-    try {
-      for (var i = 0; i < list.length; i++) rules.push(schedNormalizeRule(list[i], i));
-    } catch (e2) { setStatus(String((e2 && e2.message) || e2), "error", 0); return; }
-    if (schedPlan.rules.length &&
-        !window.confirm("Mevcut " + schedPlan.rules.length + " kural silinip yerine " + rules.length + " kural yüklenecek. Devam?")) {
+    if (!parsed || Array.isArray(parsed) || !Array.isArray(parsed.posts)) {
+      setStatus("JSON nesnesinde kesin tarihli bir posts dizisi olmalı.", "error", 0);
       return;
     }
-    schedPlan.rules = rules;
-    schedSaveNow();
+    var posts;
+    try {
+      posts = schedNormalizePosts(parsed.posts);
+    } catch (e2) { setStatus(String((e2 && e2.message) || e2), "error", 0); return; }
+    if (schedPlan.posts.length &&
+        !window.confirm("Mevcut JSON planının yerini " + posts.length +
+          " kesin tarihli gönderi alacak. X'e önceden kaydedilenler silinmez. Devam?")) {
+      return;
+    }
+    schedPlan.posts = posts;
+    schedPlan.jsonOnlyV7 = true;
     schedRender();
     box.value = "";
-    setStatus(rules.length + " kural yüklendi. Planlamayı açmayı unutma.", null, 4000);
+    if (schedPlan.enabled) {
+      schedSaveNow(function () {
+        syncScheduleNow(posts.length + " kesin tarihli gönderi yüklendi; X'e aktarım başladı.");
+      });
+    } else {
+      schedSaveNow();
+      setStatus(posts.length + " gönderilik JSON planı yüklendi; aktarım için üstteki Açık anahtarını aç.", "warn", 0);
+    }
   }
 
   function loadSchedule() {
     try {
       chrome.storage.local.get([SCHED_RULES_KEY, SCHED_STATE_KEY], function (d) {
         var plan = d && d[SCHED_RULES_KEY];
+        var enabled = !!(plan && plan.enabled);
         if (plan && typeof plan === "object") {
-          schedPlan.enabled = !!plan.enabled;
-          schedPlan.rules = Array.isArray(plan.rules) ? plan.rules : [];
+          schedPlan.enabled = enabled;
+          schedPlan.posts = Array.isArray(plan.posts) ? plan.posts : [];
+          schedPlan.jsonOnlyV7 = !!plan.jsonOnlyV7;
         }
         schedState = (d && d[SCHED_STATE_KEY]) || {};
         $("sched-enabled").checked = schedPlan.enabled;
         schedRender();
+        if (!schedPlan.jsonOnlyV7) {
+          fetch(BUNDLED_PLAN_URL).then(function (response) {
+            if (!response.ok) throw new Error("paketli JSON okunamadı (" + response.status + ")");
+            return response.json();
+          }).then(function (bundled) {
+            schedPlan.posts = schedNormalizePosts(bundled.posts);
+            schedPlan.jsonOnlyV7 = true;
+            schedRender();
+            schedSaveNow(function () {
+              setStatus("Paketli 60 gönderilik kesin JSON planı yüklendi." +
+                (enabled ? " X'e aktarım otomatik başladı." : " Aktarım için Açık anahtarını aç."), enabled ? null : "warn", 0);
+            });
+          }).catch(function (error) {
+            setStatus("Paketli plan yüklenemedi: " + String((error && error.message) || error), "error", 0);
+          });
+        }
       });
       // The content script updates the state as it plans and posts; mirror it
       // live so "bugün ~09:41" appears without reopening the popup.
@@ -586,19 +566,27 @@
 
     $("sched-enabled").addEventListener("change", function (e) {
       schedPlan.enabled = !!e.target.checked;
-      schedSaveNow();
-      setStatus(schedPlan.enabled
-        ? "Planlama açık — saati gelince açık x.com sekmesi paylaşır."
-        : "Planlama kapalı.", null, 2600);
+      if (schedPlan.enabled) {
+        schedSaveNow(function () {
+          syncScheduleNow("Planlama açık; JSON gönderileri X'in kuyruğuna aktarılıyor.");
+        });
+      } else {
+        schedSaveNow();
+        setStatus("Planlama kapalı.", null, 2600);
+      }
     });
-    $("sched-add").addEventListener("click", function () {
-      schedPlan.rules.push(schedNewRule());
-      schedRender();
-      schedSave();
+    $("sched-sync").addEventListener("click", function () {
+      schedSaveNow(function () { syncScheduleNow(); });
     });
     $("sched-export").addEventListener("click", function () {
-      $("sched-json").value = JSON.stringify(schedPlan.rules, null, 2);
-      setStatus("Mevcut kurallar yazıldı, kopyalayıp saklayabilirsin.", null, 2600);
+      var exported = {
+        version: 2,
+        type: "xverim-calendar",
+        timezone: schedTimeZoneName(),
+        posts: schedPlan.posts
+      };
+      $("sched-json").value = JSON.stringify(exported, null, 2);
+      setStatus("Kesin tarihli JSON planı yazıldı; kopyalayıp saklayabilirsin.", null, 2600);
     });
     $("sched-import").addEventListener("click", schedImport);
     // Enter and Cmd+Enter belong to the JSON box while it has focus.
@@ -621,14 +609,6 @@
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); generate(); }
     });
 
-    // The popup is torn down the instant it loses focus — flush the debounced
-    // schedule save or the last edit before closing never lands.
-    window.addEventListener("pagehide", function () {
-      if (schedSaveTimer) { clearTimeout(schedSaveTimer); schedSaveTimer = null; schedSaveNow(); }
-    });
-    window.addEventListener("blur", function () {
-      if (schedSaveTimer) { clearTimeout(schedSaveTimer); schedSaveTimer = null; schedSaveNow(); }
-    });
   }
 
   if (document.readyState === "loading") {

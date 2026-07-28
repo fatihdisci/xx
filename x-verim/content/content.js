@@ -1582,35 +1582,34 @@
   });
 
   // ============== Scheduled posts (Planlama) ==============
-  // Posts the user planned in the popup's Planlama card: message lists split
-  // on |, one post per matching day at a random minute inside the chosen
-  // window. This is the single, deliberate exception to the "never auto-click
-  // submit" rule — the human chose the text and the window; we only pick the
-  // minute. Opt-in, off by default.
+  // The popup accepts only explicit JSON posts. Every message and timestamp is
+  // already final; this script never invents, rotates, skips or re-times one.
   //
   // Server-side, so the machine does not have to be on. Each slot is handed to
   // X's OWN scheduled-posts system through the same CreateScheduledTweet
   // GraphQL call its composer makes behind "Gönderiyi planla" — authorised by
   // the user's session cookies, which we never read. Once registered the post
   // lives in X's queue (Planlanan gönderiler, g+t) and goes out with the
-  // browser closed; a tab only has to be open long enough to register it,
-  // which is why slots are booked up to a week ahead.
+  // browser closed; a tab only has to stay open until the JSON list is lodged.
   //
   // X rotates the GraphQL operation id on their deploys, so a stale id is
   // expected rather than exceptional: a 400/404 triggers one rediscovery pass
   // over the bundles this page already loaded, and the fresh id is cached.
   //
-  // Two storage keys on purpose: the popup owns the plan (rules + master
+  // Two storage keys on purpose: the popup owns the JSON plan + master
   // switch), this script owns the runtime state (what has been handled). One
   // shared key would let a popup save clobber an in-flight claim.
   var SCHED_RULES_KEY = "xverim_schedule_v1";
   var SCHED_STATE_KEY = "xverim_schedule_state_v1";
   var SCHED_QID_KEY = "xverim_sched_qid_v1";   // discovered {qid, bearer}
+  var SCHEDULER_VERSION = 7;
   var SCHED_TICK_MS = 30000;
-  var SCHED_MAX_PER_TICK = 4;   // registrations per pass, spaced — not a burst
-  var SCHED_MAX_PENDING = 40;   // outstanding registrations — pace beats reach
+  var SCHED_MAX_PER_TICK = 1;   // X starts refusing bursts after a few writes
+  var SCHED_CALENDAR_GAP_MIN_MS = 20 * 1000;
+  var SCHED_CALENDAR_GAP_JITTER_MS = 15 * 1000;
+  var SCHED_FORBIDDEN_GAP_MS = 3 * 60 * 60 * 1000;
+  var SCHED_MAX_PENDING = 1000; // X's documented draft/scheduled-post ceiling
   var SCHED_MIN_LEAD_MIN = 5;   // X rejects an execute_at that is nearly now
-  var SCHED_LOOKAHEAD_DAYS = 7; // how far ahead slots are handed to X
   // X's public web-app token. It ships in x.com's own JS for every visitor and
   // identifies the client, not the person — the session cookie is what proves
   // who you are. Verified against the operation id in the same bundle.
@@ -1634,33 +1633,6 @@
       try { chrome.storage.local.set(obj, function () { resolve(); }); }
       catch (_) { resolve(); }
     });
-  }
-
-  function schedParseHM(s) {
-    var m = /^(\d{1,2}):(\d{2})$/.exec(String(s || "").trim());
-    if (!m) return null;
-    var v = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-    return (v >= 0 && v < 1440) ? v : null;
-  }
-  function schedDayKey(d) {
-    var m = d.getMonth() + 1, day = d.getDate();
-    return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
-  }
-  // days: "all" | "wd" (Mon-Fri) | "we" (Sat-Sun) | "0".."6" (JS getDay, 0=Sunday)
-  function schedDayMatches(days, date) {
-    var dow = (date || new Date()).getDay();
-    if (!days || days === "all") return true;
-    if (days === "wd") return dow >= 1 && dow <= 5;
-    if (days === "we") return dow === 0 || dow === 6;
-    return String(dow) === String(days);
-  }
-  // One message per line — that is just the Enter key, whereas "|" is a
-  // three-finger gymnastic on a Turkish layout. Pipes still split, so a list
-  // pasted from somewhere else keeps working.
-  function schedMessages(rule) {
-    return String(rule.messages || "").split(/[\n|]+/)
-      .map(function (s) { return s.trim(); })
-      .filter(Boolean);
   }
 
   // ---- X's GraphQL scheduler ----
@@ -1704,28 +1676,36 @@
   function schedGraphQL(qid, text, executeAtMs) {
     var csrf = schedCsrfToken();
     if (!csrf) return Promise.reject(new Error("oturum bulunamadı, x.com'a giriş yapılı olmalı"));
-    return fetch("https://x.com/i/api/graphql/" + qid + "/CreateScheduledTweet", {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "content-type": "application/json",
-        "authorization": "Bearer " + SCHED_BEARER,
-        "x-csrf-token": csrf,
-        "x-twitter-auth-type": "OAuth2Session",
-        "x-twitter-active-user": "yes"
-      },
-      body: JSON.stringify({
-        variables: {
-          post_tweet_request: {
-            auto_populate_reply_metadata: false,
-            exclude_reply_user_ids: [],
-            media_ids: [],
-            status: text
-          },
-          execute_at: Math.floor(executeAtMs / 1000)
+    if (!window.XVerimTransaction || typeof window.XVerimTransaction.create !== "function") {
+      return Promise.reject(new Error("X işlem kimliği üreticisi yüklenmedi; eklentiyi kapatıp aç ve x.com'u yenile"));
+    }
+    var path = "/i/api/graphql/" + qid + "/CreateScheduledTweet";
+    return window.XVerimTransaction.create("POST", path).then(function (transactionId) {
+      return fetch("https://x.com" + path, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "authorization": "Bearer " + SCHED_BEARER,
+          "x-client-transaction-id": transactionId,
+          "x-csrf-token": csrf,
+          "x-twitter-auth-type": "OAuth2Session",
+          "x-twitter-active-user": "yes",
+          "x-twitter-client-language": document.documentElement.lang || "tr"
         },
-        queryId: qid
-      })
+        body: JSON.stringify({
+          variables: {
+            post_tweet_request: {
+              auto_populate_reply_metadata: false,
+              exclude_reply_user_ids: [],
+              media_ids: [],
+              status: text
+            },
+            execute_at: Math.floor(executeAtMs / 1000)
+          },
+          queryId: qid
+        })
+      });
     }).then(function (res) {
       return res.text().then(function (body) {
         var data = null;
@@ -1735,9 +1715,17 @@
           err.staleQid = true;
           throw err;
         }
-        if (!res.ok) throw new Error("X " + res.status);
+        if (!res.ok) {
+          var httpErr = new Error("X " + res.status + (res.status === 403 ? " Forbidden" : ""));
+          httpErr.status = res.status;
+          httpErr.retryable = res.status === 403 || res.status === 429 || res.status >= 500;
+          throw httpErr;
+        }
         if (data && data.errors && data.errors.length) {
-          throw new Error(String(data.errors[0].message || "X hatası"));
+          var graphMessage = String(data.errors[0].message || "X hatası");
+          var graphError = new Error(graphMessage);
+          graphError.transactionRejected = /\(214\)/.test(graphMessage);
+          throw graphError;
         }
         var id = data && data.data && data.data.tweet && data.data.tweet.rest_id;
         if (!id) throw new Error("X bir plan kimliği döndürmedi");
@@ -1752,6 +1740,14 @@
     return schedStorageGet([SCHED_QID_KEY]).then(function (d) {
       var qid = (d[SCHED_QID_KEY] && d[SCHED_QID_KEY].qid) || SCHED_CREATE_QID_DEFAULT;
       return schedGraphQL(qid, text, executeAtMs).catch(function (e) {
+        if (e && e.transactionRejected && window.XVerimTransaction &&
+            typeof window.XVerimTransaction.reset === "function") {
+          // X rotated the public verification material while this tab stayed
+          // open. A rejected transaction is definitive, so one fresh retry
+          // cannot duplicate a scheduled post.
+          window.XVerimTransaction.reset();
+          return schedGraphQL(qid, text, executeAtMs);
+        }
         if (!e || !e.staleQid) throw e;
         return schedDiscoverQid().then(function (fresh) {
           if (!fresh || fresh === qid) throw e;
@@ -1763,90 +1759,6 @@
         });
       });
     });
-  }
-
-  // ---- Planning pass ----
-  // For every rule, make sure each matching day in the lookahead window already
-  // has a slot registered with X. Once registered the browser is out of the
-  // loop entirely — X posts it whether or not this machine is even on.
-  // A minute that doesn't look chosen by a machine. Uniform inside the window,
-  // then nudged off the quarter-hours: a uniform draw lands on :00 or :30 often
-  // enough that, across a month of posts, the round ones are the only thing
-  // anybody would notice. Seconds are random too — every scheduled post landing
-  // at exactly :00 seconds is a fingerprint nothing else would explain.
-  function schedPickMinute(start, end) {
-    var span = Math.max(1, end - start);
-    var minute = start + Math.floor(Math.random() * span);
-    if (minute % 15 === 0 && span > 8) {
-      minute += (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.random() * 4));
-      if (minute < start) minute = start + 1;
-      if (minute >= end) minute = end - 1;
-    }
-    return minute;
-  }
-
-  function schedOccurrences(rule) {
-    var out = [];
-    var start = schedParseHM(rule.start), end = schedParseHM(rule.end);
-    if (start == null || end == null || end <= start) return out;
-    var now = new Date();
-    var nowMs = now.getTime();
-    for (var offset = 0; offset <= SCHED_LOOKAHEAD_DAYS; offset++) {
-      var day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
-      if (!schedDayMatches(rule.days, day)) continue;
-      var minute = schedPickMinute(start, end);
-      var at = new Date(day.getFullYear(), day.getMonth(), day.getDate(),
-                        0, minute, Math.floor(Math.random() * 60), 0).getTime();
-      // Too close to now (or past) is not a plan — skip to the next day rather
-      // than firing something the user never saw coming.
-      if (at - nowMs < SCHED_MIN_LEAD_MIN * 60000) continue;
-      out.push({ key: rule.id + "@" + schedDayKey(day), at: at });
-    }
-    return out;
-  }
-
-  // Posting every single matching day, without ever missing one, is the loudest
-  // tell there is — no human keeps a 100% streak for a month. `skip` is the
-  // percentage of otherwise-matching days the rule quietly sits out. The roll
-  // happens once per day and is recorded, so it can't flip between passes.
-  function schedRollSkip(rule) {
-    var pct = Number(rule.skip);
-    if (!(pct > 0)) return false;
-    return Math.random() * 100 < Math.min(90, pct);
-  }
-
-  // "bag" is the default and the reason drafts don't repeat: draw without
-  // replacement until every message has been used, then reshuffle. Pure random
-  // posts "Günaydın" twice in one week while another line never appears, which
-  // reads worse than a rotation. The bag is stored, so it survives reloads.
-  function schedPickMessage(rule, meta) {
-    var msgs = schedMessages(rule);
-    if (!msgs.length) return null;
-    if (rule.order === "sequential") {
-      var idx = ((meta.seq || 0) % msgs.length + msgs.length) % msgs.length;
-      meta.seq = idx + 1;
-      return msgs[idx];
-    }
-    if (rule.order === "random") return msgs[Math.floor(Math.random() * msgs.length)];
-
-    var bag = Array.isArray(meta.bag) ? meta.bag.filter(function (i) { return i < msgs.length; }) : [];
-    if (!bag.length) {
-      for (var i = 0; i < msgs.length; i++) bag.push(i);
-      // Fisher-Yates, minus the last message drawn, so a reshuffle can't hand
-      // back the same line two days running.
-      for (var j = bag.length - 1; j > 0; j--) {
-        var k = Math.floor(Math.random() * (j + 1));
-        var tmp = bag[j]; bag[j] = bag[k]; bag[k] = tmp;
-      }
-      if (bag.length > 1 && bag[bag.length - 1] === meta.last) {
-        bag[bag.length - 1] = bag[0];
-        bag[0] = meta.last;
-      }
-    }
-    var pick = bag.pop();
-    meta.bag = bag;
-    meta.last = pick;
-    return msgs[pick];
   }
 
   function schedPrune(state) {
@@ -1862,39 +1774,90 @@
     if (schedBusy) return;
     schedStorageGet([SCHED_RULES_KEY, SCHED_STATE_KEY]).then(function (d) {
       var plan = d[SCHED_RULES_KEY] || {};
-      if (!plan.enabled || !Array.isArray(plan.rules) || !plan.rules.length) return;
+      var hasCalendar = Array.isArray(plan.posts) && plan.posts.length > 0;
+      if (!plan.enabled || !hasCalendar) return;
       var state = d[SCHED_STATE_KEY] || {};
       schedPrune(state);
+      var runtime = state["#scheduler"] || (state["#scheduler"] = {});
+      var migratedForbidden = false;
+      if (!runtime.transactionHeaderV5) {
+        // Builds before v5 made requests without X-Client-Transaction-Id.
+        // Keep successful registrations, but definite rejections from those
+        // builds must not permanently block today's nearest slot.
+        for (var failedKey in state) {
+          var failed = state[failedKey];
+          if (failed && !failed.ok && failed.error) delete state[failedKey];
+        }
+        delete runtime.nextAttemptAt;
+        delete runtime.reason;
+        runtime.transactionHeaderV5 = true;
+        migratedForbidden = true;
+      }
+      for (var stateKey in state) {
+        var oldFailure = state[stateKey];
+        if (!oldFailure || oldFailure.ok || oldFailure.retryAt || !/^X (403|429)/.test(oldFailure.error || "")) continue;
+        oldFailure.retryable = true;
+        oldFailure.retryAt = Date.now() + SCHED_FORBIDDEN_GAP_MS;
+        oldFailure.error = String(oldFailure.error).replace(/\s*·.*$/, "") + " · daha sonra otomatik yeniden denenecek";
+        migratedForbidden = true;
+        if (!runtime.nextAttemptAt || runtime.nextAttemptAt < oldFailure.retryAt) {
+          runtime.nextAttemptAt = oldFailure.retryAt;
+          runtime.reason = oldFailure.error;
+        }
+      }
+      if (runtime.nextAttemptAt && runtime.nextAttemptAt > Date.now()) {
+        if (migratedForbidden) return schedStorageSet(getStatePatch(state));
+        return;
+      }
 
       var pending = 0;
       for (var k in state) { if (state[k] && state[k].at > Date.now() && state[k].ok) pending++; }
 
-      // Walk every rule's unbooked days. Skipped days cost nothing, so they are
-      // resolved here and now; real registrations are a network call each, so
-      // only a few go out per tick — spacing them is both kinder to X and less
-      // machine-like than firing thirty mutations in one burst.
+      // JSON order is not trusted; always send the nearest exact timestamp first.
       var queue = [];
-      for (var i = 0; i < plan.rules.length; i++) {
-        var rule = plan.rules[i];
-        if (!rule || !rule.enabled || !rule.id || !schedMessages(rule).length) continue;
-        var meta = state[rule.id + "#seq"] || (state[rule.id + "#seq"] = { seq: 0 });
-        var occ = schedOccurrences(rule);
-        for (var j = 0; j < occ.length; j++) {
-          // Anything already decided stays decided. Re-rolling a slot whose
-          // response we lost is how you end up posting the same line twice.
-          if (state[occ[j].key]) continue;
-          if (schedRollSkip(rule)) {
-            state[occ[j].key] = { at: occ[j].at, skipped: true, rule: rule.id };
-            continue;
-          }
-          if (queue.length + pending >= SCHED_MAX_PENDING) break;
-          if (queue.length >= SCHED_MAX_PER_TICK) break;
-          var text = schedPickMessage(rule, meta);
-          if (!text) break;
+      var candidates = [];
+      for (var p = 0; p < plan.posts.length; p++) {
+        var post = plan.posts[p];
+        var postAt = post && Date.parse(String(post.at || ""));
+        var postText = String((post && post.text) || "").trim();
+        if (!post || !post.id || !isFinite(postAt) || !postText || postText.length > 280) continue;
+        if (postAt - Date.now() < SCHED_MIN_LEAD_MIN * 60000) continue;
+        var postKey = "post@" + post.id;
+        var postExisting = state[postKey];
+        if (postExisting && postExisting.error && !postExisting.ok &&
+            postExisting.retryable && postExisting.retryAt <= Date.now()) {
+          delete state[postKey];
+          postExisting = null;
+        }
+        if (postExisting) continue;
+        candidates.push({
+          occurrence: { key: postKey, at: postAt },
+          text: postText,
+          label: String(post.label || "JSON planı"),
+          postId: String(post.id)
+        });
+      }
+      candidates.sort(function (a, b) { return a.occurrence.at - b.occurrence.at; });
+      if (pending < SCHED_MAX_PENDING && candidates.length && SCHED_MAX_PER_TICK > 0) {
+        var selected = candidates[0];
+        var text = selected.text;
+        if (text) {
           // Claim before the network call, so a second tab doesn't register the
           // same slot while this one is waiting on X.
-          state[occ[j].key] = { at: occ[j].at, ok: false, by: schedInstanceId, ts: Date.now(), rule: rule.id };
-          queue.push({ key: occ[j].key, at: occ[j].at, text: text, label: rule.label || "Plan" });
+          state[selected.occurrence.key] = {
+            at: selected.occurrence.at,
+            ok: false,
+            by: schedInstanceId,
+            ts: Date.now(),
+            rule: "calendar",
+            postId: selected.postId || ""
+          };
+          queue.push({
+            key: selected.occurrence.key,
+            at: selected.occurrence.at,
+            text: text,
+            label: selected.label
+          });
         }
       }
       if (!queue.length) { schedStorageSet(getStatePatch(state)); return; }
@@ -1911,11 +1874,25 @@
           return schedRegister(item.text, item.at).then(function (id) {
             state[item.key].ok = true;
             state[item.key].xid = id;
+            var successGap = SCHED_CALENDAR_GAP_MIN_MS +
+              Math.floor(Math.random() * SCHED_CALENDAR_GAP_JITTER_MS);
+            runtime.nextAttemptAt = Date.now() + successGap;
+            runtime.reason = "calendar-paced";
+            setTimeout(schedTick, successGap + 100);
           }).catch(function (e) {
-            state[item.key].error = String((e && e.message) || e);
+            var message = String((e && e.message) || e);
+            state[item.key].error = message;
+            if (e && e.retryable) {
+              var gap = e.status === 403 ? SCHED_FORBIDDEN_GAP_MS : 60 * 60 * 1000;
+              state[item.key].retryable = true;
+              state[item.key].retryAt = Date.now() + gap;
+              runtime.nextAttemptAt = state[item.key].retryAt;
+              runtime.reason = message;
+              state[item.key].error = message + " · daha sonra otomatik yeniden denenecek";
+            }
             if (!schedWarned) {
               schedWarned = true;
-              showToast("Planlama: X'e kaydedilemedi — " + state[item.key].error, { kind: "error", duration: 6000 });
+              showToast("Planlama duraklatıldı — " + state[item.key].error, { kind: "error", duration: 10000 });
             }
           }).then(function () {
             return schedStorageSet(getStatePatch(state));
@@ -1934,6 +1911,44 @@
     return obj;
   }
 
+  function schedResponseSummary(state, plan) {
+    var now = Date.now();
+    var runtime = (state && state["#scheduler"]) || {};
+    var booked = 0;
+    var calendarBooked = 0;
+    var calendarTotal = plan && Array.isArray(plan.posts) ? plan.posts.length : 0;
+    var calendarIds = {};
+    if (calendarTotal) {
+      for (var p = 0; p < plan.posts.length; p++) {
+        if (plan.posts[p] && plan.posts[p].id) calendarIds[String(plan.posts[p].id)] = true;
+      }
+    }
+    var latestError = "";
+    var latestErrorAt = 0;
+    for (var k in state) {
+      var st = state[k];
+      if (!st || k === "#scheduler" || k.indexOf("#seq") > 0) continue;
+      if (st.ok && st.at > now) booked++;
+      if (st.ok && st.postId && calendarIds[st.postId]) calendarBooked++;
+      if (st.error && (st.ts || 0) >= latestErrorAt) {
+        latestErrorAt = st.ts || 0;
+        latestError = st.error;
+      }
+    }
+    return {
+      ok: true,
+      schedulerVersion: SCHEDULER_VERSION,
+      busy: schedBusy,
+      booked: booked,
+      calendarBooked: calendarBooked,
+      calendarTotal: calendarTotal,
+      calendarRemaining: Math.max(0, calendarTotal - calendarBooked),
+      error: latestError,
+      cooldownUntil: runtime.nextAttemptAt > now ? runtime.nextAttemptAt : 0,
+      cooldownReason: runtime.reason || ""
+    };
+  }
+
   function startScheduler() {
     if (schedTimer) return;
     // One pass shortly after load registers everything due in the lookahead
@@ -1941,6 +1956,14 @@
     // X's job now, not this tab's.
     setTimeout(schedTick, 5000);
     schedTimer = setInterval(schedTick, SCHED_TICK_MS);
+    // Imports and edits happen in the popup. Wake this tab as soon as the plan
+    // is saved instead of making the user wait for the next interval.
+    try {
+      chrome.storage.onChanged.addListener(function (changes, area) {
+        if (area !== "local" || !changes[SCHED_RULES_KEY]) return;
+        setTimeout(schedTick, 100);
+      });
+    } catch (_) {}
   }
 
   // ============== Guardrail banner ==============
@@ -1989,6 +2012,39 @@
     if (msg.type === "GUARDRAIL_WARN") showBanner(msg.kind);
     if (msg.type === "OPEN_COMPOSER_WITH_TEXT") {
       openComposerWithText(msg.text).then(function (ok) { sendResponse({ ok: !!ok }); });
+      return true;
+    }
+    if (msg.type === "SCHEDULE_SYNC_NOW") {
+      // This response doubles as a version handshake. A popup talking to an
+      // already-open tab with an older content script can now say "reload"
+      // instead of leaving the plan silently stuck.
+      schedStorageGet([SCHED_STATE_KEY, SCHED_RULES_KEY]).then(function (stored) {
+        var currentState = stored[SCHED_STATE_KEY] || {};
+        var currentPlan = stored[SCHED_RULES_KEY] || {};
+        var runtime = currentState["#scheduler"] || {};
+        if (runtime.nextAttemptAt && runtime.nextAttemptAt > Date.now()) {
+          sendResponse(schedResponseSummary(currentState, currentPlan));
+          return;
+        }
+        schedTick();
+        // Report the result, not merely that the button reached this tab.
+        // One registration normally finishes in under two seconds; keep the
+        // message port open for slow responses, but never strand the popup.
+        var deadline = Date.now() + 20000;
+        function finishWhenSettled() {
+          if (schedBusy && Date.now() < deadline) {
+            setTimeout(finishWhenSettled, 300);
+            return;
+          }
+          schedStorageGet([SCHED_STATE_KEY, SCHED_RULES_KEY]).then(function (latest) {
+            sendResponse(schedResponseSummary(
+              latest[SCHED_STATE_KEY] || {},
+              latest[SCHED_RULES_KEY] || {}
+            ));
+          });
+        }
+        setTimeout(finishWhenSettled, 300);
+      });
       return true;
     }
   });

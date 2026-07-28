@@ -265,123 +265,83 @@ yaşıyorlar.
 
 ---
 
-## Gönderi planlama
+## Kesin tarihli JSON planlama
 
-Varsayılan olarak kapalı, açıkça açman gerekiyor.
+Planlayıcı varsayılan olarak kapalıdır ve artık yalnızca önceden hazırlanmış
+kesin tarihli JSON kabul eder. Kural, mesaj havuzu, `skip`, günlük kura veya
+otomatik metin üretimi yoktur. Sistem JSON'da yazmayan hiçbir gönderiyi
+oluşturmaz; metni ve saati değiştirmez.
 
-### Bir kural nelerden oluşuyor
+### JSON biçimi
 
-| Alan | Ne işe yarıyor |
-| --- | --- |
-| Ad | Sadece senin için etiket ("Sabah", "Cuma") |
-| Gün | Her gün / hafta içi / hafta sonu / tek bir gün |
-| Saat aralığı | Gönderinin düşeceği pencere, örneğin 07:20–09:50 |
-| Sıra | Tekrarsız / Rastgele / Sırayla |
-| Atlama | Günlerin yüzde kaçının sessizce atlanacağı |
-| Mesajlar | **Her satıra bir mesaj** |
+```json
+{
+  "version": 2,
+  "type": "xverim-calendar",
+  "timezone": "Europe/Istanbul",
+  "posts": [
+    {
+      "id": "cal-ms4c1yig-1",
+      "at": "2026-07-28T10:27:07+03:00",
+      "text": "hey, good morning",
+      "label": "EN · Avrupa sabahı"
+    }
+  ]
+}
+```
 
-### Bilgisayar kapalıyken nasıl paylaşılıyor
+- `posts` zorunlu ve boş olmayan bir dizidir.
+- `at` ISO 8601 tarih-saat veya milisaniye zaman damgasıdır. Saat dilimi
+  açıkça yazılmalıdır; içe aktarım bunu mutlak zamana dönüştürür.
+- `text` zorunludur ve en fazla 280 karakter olabilir.
+- `id` verilmezse tarih ve metinden kararlı bir kimlik üretilir. Aynı JSON'u
+  tekrar yüklemek aynı gönderiyi ikinci kez planlamaz.
+- `label` isteğe bağlıdır ve yalnızca yerel durum için kullanılır.
 
-Paylaşımı eklenti yapmıyor, **X yapıyor.** Her slot, x.com'un kendi gönderi
-kutusundaki *Gönderiyi planla* düğmesinin arkasındaki `CreateScheduledTweet`
-çağrısıyla X'in kendi planlanan gönderiler kuyruğuna kaydediliyor. Yetkiyi senin
-oturum çerezin veriyor; eklenti hiçbir kimlik bilgini okumuyor ya da saklamıyor.
+### Kullanım
 
-Bir slot kaydolduktan sonra X'te **Planlanan gönderiler** sayfasında görünüyor
-(`g` sonra `t`) ve bu makine kapalı olsa bile paylaşılıyor.
+1. **Plan JSON'u** kutusuna kesin tarihli dosyayı yapıştır.
+2. **JSON'u yükle** düğmesine bas.
+3. Üstteki **Açık** anahtarını aç.
+4. **JSON planını X'e aktar** düğmesine bir kez bas.
+5. Sayaç `60/60 X'e kayıtlı` olduğunda X sekmesi ve bilgisayar kapatılabilir.
 
-**Tek şart:** slotların kaydolması için ara sıra bir x.com sekmesinin açık olması
-gerekiyor. Slotlar **7 gün ileriye kadar** ayrılıyor, yani bugün birkaç dakika
-açık kalan bir sekme haftanın tamamını kuruyor. Sekme sadece *kaydeden* şey,
-hiçbir zaman *paylaşan* şey değil.
+**Mevcut JSON'u yaz** depodaki geçerli kesin planı kutuya çıkarır. Yeni JSON
+yüklemek yerel listenin yerini alır; X'e daha önce kaydedilmiş gönderileri
+silmez. Bunun için X'in Planlanmış ekranı kullanılmalıdır.
 
-### Sahte görünmemek için üç mekanizma
+Hazırlanmış kişisel dosya `planlama-60-gun.json` adındadır ve gitignore
+nedeniyle repoya girmez. Metinlerin herkese açık kaynak kodda bulunmaması
+bilinçli bir gizlilik tercihidir.
 
-Bir planlamayı ele veren şey saat değil. Üç şey ele veriyor ve üçü de varsayılan
-olarak açık:
+### Bilgisayar kapalıyken
 
-**Liste bitmeden tekrar yok.** `Tekrarsız` (varsayılan) bir torbadan çekiliyor:
-bütün mesajlar kullanılmadan hiçbiri tekrar etmiyor, torba yenilendiğinde de en
-son kullanılan satır başa gelemiyor. Saf rastgelede bir selamlama bir haftada iki
-kez çıkarken başka biri hiç çıkmıyor, bu bariz bir dönüşümden daha kötü duruyor.
+Her gönderi x.com'un kendi `CreateScheduledTweet` işlemiyle X'in planlanmış
+gönderiler kuyruğuna kaydedilir. Yetki mevcut x.com oturumundan gelir; eklenti
+çerezi okumaz, saklamaz veya başka bir yere göndermez. X kabul ettikten sonra
+paylaşımı X yapar ve bilgisayarın açık kalması gerekmez.
 
-**Atlanan günler.** `%15 / %25 / %40 atla` uygun günlerin o kadarını sessizce
-atlıyor. Aralıksız 60 günlük bir seri en yüksek sesli ipucu; gönderiler hiç
-aksamıyorsa geri kalan hiçbir detayın önemi kalmıyor.
+Aktarım sırasında X sekmesi açık kalmalıdır. Gönderiler aynı anda patlatılmaz;
+her başarılı kayıt arasında rastgele 20–35 saniye bulunur. X `403 Forbidden`
+veya `429` döndürürse kesin başarısız kayıt kaybolmaz, geri çekilme süresinden
+sonra yeniden denenir. 60 gönderinin ilk aktarımı normalde yaklaşık 20–35
+dakika sürer.
 
-**Yuvarlak dakika yok.** Düz bir rastgele seçim `:00` ve `:30`'a bir ay içinde
-gözle görülür sıklıkta düşüyor ve insanların fark edeceği tek şey o oluyor. Çeyrek
-saate denk gelen bir atış birkaç dakika kaydırılıyor, saniyeler de rastgele.
-Her gönderinin tam `:00` saniyede düşmesinin masum bir açıklaması yok.
+### İç mekanik
 
-60 günlük simülasyonla ölçüldü: 10 satırın kullanımı 4-5 arasında eşit dağıldı,
-arka arkaya tekrar sıfır, çeyrek saate denk gelme 0/48.
-
-### İçerik kuralı: olmuş bir şey iddia etme
-
-Bu kural "her zaman geçerli olsun"dan daha sert. **Planlanmış bir satır hiçbir
-şeyin olduğunu iddia etmemeli.** Bu satırlar bugün yazılıp bilinmeyen bir güne
-paylaşılıyor, dolayısıyla "bugün şunu yayınladım" veya "bu hafta dört işe
-başladım" düştüğü gün sadece bayat değil, **yanlış** oluyor. Gerçekle hiç
-örtüşmeyen bir ilerleme raporu akışı hem yalan hem de fark edilmesi en kolay
-otomasyon türü.
-
-Selamlar, temenniler ve haller güvenli, çünkü hangi gün düşerse düşsün doğrular.
-Şekilleri de çeşitlendir (iki kelimeden kısa bir cümleye kadar), yoksa on tanesi
-tek bir şablon gibi okunuyor.
-
-### İçe / dışa aktar
-
-380 piksellik bir popup'ta elli satır yazmak kimsenin yapması gereken bir şey
-değil, o yüzden kurallar JSON olarak girip çıkabiliyor. **Yükle** mevcut listenin
-tamamını değiştiriyor ve önce soruyor. **Mevcutları yaz** o anki kuralları
-kutuya döküyor, yedek almak için.
-
-Kendi kurallarını eklentinin yanında bir `planlama-*.json` dosyasında tut. Bu
-desen gitignore'da: planlanmamış görünmesi gereken metinlerin herkese açık bir
-repoda işi yok, orada dursaydı bütün çabanın anlamı kalmazdı.
-
-### Örnek kural seti
-
-`planlama-kurallarim.json` dosyasında hazır beş kural var. Saatler Türkiye
-saatine göre ve hedef kitleye göre seçildi (aşağıdakiler kış saati; Avrupa ve ABD
-yazın bir saat kayıyor):
-
-| Kural | Gün | TRT | Hedefte karşılığı |
-| --- | --- | --- | --- |
-| Sabah | Her gün | 07:20–09:50 | Türkiye sabahı |
-| EN · Avrupa sabahı | Hafta içi | 10:00–11:40 | Londra 07:00, Berlin 08:00 |
-| Cuma | Cuma | 12:30–17:00 | Türkiye, cuma namazı sonrası |
-| EN · ABD günü | Hafta sonu | 17:10–19:40 | New York 09:10, Los Angeles 06:10 |
-| Akşam | Her gün | 20:15–22:30 | Türkiye akşamı |
-
-İki İngilizce kural ayrı bölgelere nişan alıyor, çünkü tek bir saat aralığı hem
-ABD'de hem Avrupa'da sabah olamıyor. Avrupa kuralı "good morning" diyor ve
-Avrupa sabahına düşüyor. ABD kuralı ise ABD'de sabah, Avrupa'da öğleden sonra
-olduğu için **saatten bağımsız** metinler kullanıyor ("happy weekend"), yoksa
-New York'ta öğlen "good night" demek zorunda kalırdı.
-
-Pencereler çakışmıyor, yani aynı anda iki gönderi düşmüyor.
-
-### İşin iç mekaniği
-
-- Slot ayırma **kural başına günde bir kez** deneniyor. Cevabı kaybolan bir slot
-  yeniden denenmiyor: çift planlanmış bir gönderi, kaçırılmış bir gönderiden kötü.
-- X, GraphQL işlem kimliğini her dağıtımında değiştiriyor. 400/404 gelince eklenti
-  sayfanın zaten yüklediği paketleri bir kez tarayıp güncel kimliği buluyor ve
-  `xverim_sched_qid_v1` altında saklıyor. Yani X'in bir güncellemesi tek bir başarısız
-  denemeye mal oluyor, kırık bir özelliğe değil.
-- Kuralları popup sahipleniyor (`xverim_schedule_v1`), kayıt durumunu içerik
-  betiği (`xverim_schedule_state_v1`, anahtar `kuralId@YYYY-AA-GG`). Ayrı
-  anahtarlar, böylece popup'ta yapılan bir kayıt uçuştaki bir kaydı ezemiyor.
-  Birden fazla sekme bir slotu ağ isteğinden **önce** sahipleniyor.
-- Bugünün penceresi kapandıysa o gün atlanıp sonraki uygun güne geçiliyor. 5
-  dakikadan yakın olan da atlanıyor, çünkü X neredeyse şu an olan bir `execute_at`
-  değerini reddediyor.
-- Aynı anda en fazla 40 bekleyen kayıt, geçiş başına en fazla 4 tane, aralarında
-  ~1 saniye. Otuz tane isteği tek seferde patlatmak hem X'e kaba hem de makine işi.
-- Her kural popup'ta gerçek durumunu gösteriyor: `10 mesaj · X'e kayıtlı ·
-  sıradaki yarın 08:12 (+4)`, ya da X'in döndürdüğü hata.
+- JSON sırası ne olursa olsun en yakın tarih önce kaydedilir.
+- Birden fazla x.com sekmesi aynı gönderiyi ağ isteğinden önce sahiplenir; iki
+  sekme aynı kaydı oluşturmaz.
+- Beş dakikadan yakın veya geçmiş zamanlar X'e gönderilmez.
+- X'in GraphQL işlem kimliği değişirse güncel paketlerden bir kez yeniden
+  bulunur.
+- X'in zorunlu `X-Client-Transaction-Id` başlığı o anki herkese açık X
+  doğrulama verisinden tarayıcı içinde üretilir.
+- Yerel plan `xverim_schedule_v1`, sonuç durumu
+  `xverim_schedule_state_v1` altında tutulur.
+- Bir yanıt belirsizse otomatik tekrar yapılmaz; kesin HTTP reddi varsa güvenli
+  geri çekilmeyle yeniden denenir. Böylece çift plan, kaçırılmış plandan daha
+  olası hâle getirilmez.
 
 ---
 
@@ -418,7 +378,11 @@ gidiyor ve başka hiçbir yere; arka plan onu döndüren bir mesaj bile tanımla
     kaydetmek için
   - `abs.twimg.com` — sadece X'in işlem kimliği eskidiğinde, güncelini bulmak için
   - Analitik yok, üçüncü taraf SDK yok, telemetri yok.
-- Panel konumu, sayaçlar, filtre durumu ve planlama kuralları makinendeki
+
+Planlama isteklerindeki `X-Client-Transaction-Id`, MIT lisanslı
+[`x-client-transaction-id`](https://github.com/Lqm1/x-client-transaction-id)
+uygulamasından tarayıcıya uyarlanan kodla yerel olarak üretilir.
+- Panel konumu, sayaçlar, filtre durumu ve kesin tarihli JSON planı makinendeki
   `chrome.storage.local`'da duruyor.
 - **Safari'de anahtar derlenmiş `X Verim.app`'in içine giriyor**, yani oradaki
   kural sadece "`config.js`'i commit'leme" değil, "bu .app'i kimseye verme".
@@ -457,7 +421,7 @@ x-verim/
 ├── manifest.json              MV3 manifest
 ├── config.example.js          Şablon — config.js olarak kopyala
 ├── config.js                  Kişisel ayarlar — COMMIT EDİLMİYOR
-├── planlama-kurallarim.json   Planlama kuralların — COMMIT EDİLMİYOR
+├── planlama-60-gun.json       Kesin tarihli kişisel plan — COMMIT EDİLMİYOR
 ├── background.js              DeepSeek çağrıları + hız sayaçları
 ├── lib/x-dom.js               SELECTORS + DOM yardımcıları
 ├── content/

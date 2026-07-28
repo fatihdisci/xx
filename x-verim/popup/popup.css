@@ -228,7 +228,30 @@ textarea.xverim-sched-msgs {
   color: #71767b;
   font-variant-numeric: tabular-nums;
 }
-#sched-add { margin-top: 2px; }
+.xverim-sched-calendar {
+  background: rgba(29, 155, 240, 0.09);
+  border: 1px solid rgba(29, 155, 240, 0.35);
+  border-radius: 8px;
+  padding: 9px;
+  margin: 8px 0;
+}
+.xverim-sched-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #e7e9ea;
+  font-size: 12px;
+  font-weight: 700;
+}
+.xverim-sched-calendar .xverim-sched-status { margin-top: 4px; color: #8b98a5; }
+.xverim-sched-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
 
 .xverim-sched-io { margin-top: 8px; }
 .xverim-sched-io > summary {
