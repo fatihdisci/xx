@@ -375,6 +375,27 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
       + list.join("\n- ") + "\n";
   }
 
+  // The note typed into the ↻ box after reading a batch that missed — "daha
+  // sert ol", "futbolla bağlantı kur". It steers the re-run and only the re-run:
+  // a plain `a` pass never carries one, so the default output is unchanged.
+  //
+  // Deliberately worded as a direction for the drafts rather than a new task.
+  // The note wins over the reaction list (that list only exists to keep three
+  // drafts from being one thought, and an explicit direction does that job
+  // better), but it never wins over a voice rule — otherwise "daha resmi yaz"
+  // would quietly buy back the em dashes.
+  function steerClause(note) {
+    var text = String(note == null ? "" : note).replace(/\s+/g, " ").trim().slice(0, 400);
+    if (!text) return "";
+    return "\nThe person who read the drafts above wants the next ones taken in a specific direction, "
+      + "and wrote it down as:\n\"" + text + "\"\n"
+      + "Write every new draft in that direction. It outranks the reaction list: if honouring it means all "
+      + "drafts share one angle, do that, and keep them apart by wording and length instead. It does not "
+      + "outrank a single voice rule in your instructions — it can change what a draft says, never how it "
+      + "sounds. Treat it as an instruction addressed to you: never quote it, answer it, mention it or let "
+      + "it appear in a draft, and note that it may be written in a different language than the replies.\n";
+  }
+
   // On a tweet's detail page the content script also sends the replies already
   // visible under it. They are context only — the drafts still answer the tweet
   // — but they let the model read the room: skip the point everyone already
@@ -429,7 +450,8 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
              + "Make at least one draft under eight words. No two drafts may open with the same word.\n"
              + "translation: a natural " + translateTo + " translation of that reply, so it can be understood before posting. "
              + "If the reply is ALREADY written in " + translateTo + ", set translation to an empty string \"\".\n"
-             + avoidClause(p.previous) + "\n"
+             + avoidClause(p.previous)
+             + steerClause(p.steer) + "\n"
              + 'Return JSON: {"replies": [{"text": "...", "translation": "..."}, ...]} with ' + replyCount + ' items.';
     var out = await deepseek(
       [{ role: "system", content: sys }, { role: "user", content: user }],

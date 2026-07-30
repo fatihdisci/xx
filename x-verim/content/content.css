@@ -219,6 +219,36 @@
   min-width: 0;
 }
 
+/* The ↻ note. Deliberately quiet until you touch it: it sits between the source
+   tweet and the drafts, where your eye already passes, but reads as a hint line
+   rather than a form the card is waiting on. */
+.xverim-steer {
+  display: flex;
+  margin: 0 0 10px;
+  min-width: 0;
+}
+input.xverim-steer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 9px;
+  color: #e7e9ea;
+  font: 400 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+input.xverim-steer-input::placeholder { color: #5c6773; }
+input.xverim-steer-input:hover { border-color: rgba(255, 255, 255, 0.18); }
+input.xverim-steer-input:focus {
+  outline: none;
+  color: #fff;
+  background: rgba(29, 155, 240, 0.06);
+  border-color: rgba(29, 155, 240, 0.55);
+}
+
 .xverim-popover-foot {
   display: flex;
   align-items: center;

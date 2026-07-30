@@ -65,6 +65,10 @@
     // Drafts currently on screen, fed back to the model on ↻ so a re-run
     // produces new angles instead of the same three sentences reworded.
     popoverDrafts: [],
+    // What the ↻ box currently says. Only a regenerate carries it; `a` starts
+    // from nothing, so the first batch is the same batch it always was.
+    popoverSteer: "",
+    popoverSteerEl: null,
     // How many under-the-tweet replies were sent along as context (detail page
     // only) — surfaced in the card so it is visible that the thread was read.
     popoverReplyCtx: 0,
@@ -834,6 +838,8 @@
     state.popoverEl = null;
     state.popoverArticle = null;
     state.popoverDrafts = [];
+    state.popoverSteer = "";
+    state.popoverSteerEl = null;
     state.popoverReplyCtx = 0;
     if (!el || !el.parentNode) return;
     // Fading out beats vanishing: the card is anchored next to the tweet you
@@ -873,13 +879,81 @@
     return out;
   }
 
+  // One writer for the note, so the state and the field it came from can never
+  // disagree — `a` clears it from code, typing clears it from the DOM.
+  function setSteer(value) {
+    state.popoverSteer = String(value == null ? "" : value).slice(0, 200);
+    var el = state.popoverSteerEl;
+    if (el && el.isConnected && el.value !== state.popoverSteer) el.value = state.popoverSteer;
+  }
+
+  // The ↻ box: a line of your own that only applies to the next re-run — "daha
+  // sert", "futbol örneği ver", "soru sorma". Left empty, ↻ behaves exactly as it
+  // did before: same tweet, different angles.
+  //
+  // Built once per card and kept OUTSIDE the content region, because content is
+  // replaced wholesale on every state swap — a box that lost what you were typing
+  // the moment the drafts started loading would be worse than no box at all.
+  function buildSteerRow(article) {
+    var wrap = document.createElement("div");
+    wrap.className = "xverim-steer";
+
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "xverim-steer-input";
+    input.maxLength = 200;
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    input.value = state.popoverSteer;
+    // The placeholder is the only documentation this box gets, so it says what
+    // to type and which key runs it.
+    input.placeholder = "yön ver, Enter yeniden üretir";
+    input.setAttribute("aria-label", "Yeniden üretme talimatı");
+    input.title = "Taslaklar bu yönde yeniden üretilir. Boşsa ↻ eskisi gibi başka açılar dener.";
+
+    input.addEventListener("input", function () { setSteer(input.value); });
+    input.addEventListener("keydown", function (e) {
+      // Esc steps out of the field before it closes the card, the same bargain
+      // the draft textarea makes.
+      if (e.key === "Escape") { e.stopPropagation(); input.blur(); return; }
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setSteer(input.value);
+      regenerate(article);
+    });
+    // X binds plenty of single-key shortcuts on its own document; anything typed
+    // in here is ours.
+    input.addEventListener("keypress", function (e) { e.stopPropagation(); });
+    input.addEventListener("keyup", function (e) { e.stopPropagation(); });
+
+    wrap.appendChild(input);
+    state.popoverSteerEl = input;
+    return wrap;
+  }
+
+  // Both ways of asking for new drafts land here. The busy check is what stops a
+  // held-down Enter from buying four batches of the same three drafts.
+  function regenerate(article) {
+    var pop = state.popoverEl;
+    if (pop && pop.isConnected && pop.classList.contains("xverim-popover-busy")) return;
+    runAnalyze(article, { regenerate: true });
+  }
+
   // Kick off (or re-run) the AI pass for a tweet and drive the popover through
   // its loading / error / result states. The regenerate button reuses this and
   // passes what's already on screen, so ↻ means "different ones", not "again".
+  //
+  // Only a regenerate carries the steer note. `a` is the untouched first pass on
+  // purpose: you cannot steer drafts you have not read yet, and a leftover note
+  // silently shaping a fresh tweet's first batch would be the worse surprise.
   function runAnalyze(article, options) {
     if (!article) return;
     var regenerate = !!(options && options.regenerate);
-    if (!regenerate) state.popoverDrafts = [];
+    if (!regenerate) {
+      state.popoverDrafts = [];
+      setSteer("");
+    }
     var contextReplies = collectReplyContext(article);
     state.popoverReplyCtx = contextReplies.length;
     var payload = {
@@ -887,7 +961,8 @@
       authorHandle: D.getAuthorHandle(article),
       counts: D.getCountsFromGroup(article),
       replies: contextReplies,
-      previous: state.popoverDrafts.slice(0)
+      previous: state.popoverDrafts.slice(0),
+      steer: regenerate ? state.popoverSteer : ""
     };
     showAnalyzePopover(article, { status: "loading" });
     try {
@@ -1202,7 +1277,7 @@
     header.innerHTML = ''
       + '<span class="xverim-popover-title">' + SPARK_ICON + '<span>Taslaklar</span></span>'
       + '<span class="xverim-popover-header-actions">'
-      +   '<button type="button" class="xverim-icon-btn" data-act="regen" aria-label="Yeniden üret" title="Başka açılar dene">' + REFRESH_ICON + '</button>'
+      +   '<button type="button" class="xverim-icon-btn" data-act="regen" aria-label="Yeniden üret" title="Yeniden üret — kutuya bir şey yazdıysan o yönde">' + REFRESH_ICON + '</button>'
       +   '<button type="button" class="xverim-icon-btn" data-act="close" aria-label="Kapat" title="Kapat (Esc)">' + CLOSE_ICON + '</button>'
       + '</span>';
 
@@ -1210,7 +1285,7 @@
     header.querySelector("[data-act='regen']").addEventListener("click", function (e) {
       e.preventDefault();
       e.stopPropagation();
-      runAnalyze(article, { regenerate: true });
+      regenerate(article);
     });
 
     // A hairline that fills while the model is working. The skeleton says
@@ -1222,6 +1297,7 @@
     pop.appendChild(header);
     pop.appendChild(progress);
     pop.appendChild(buildTweetContext(article));
+    pop.appendChild(buildSteerRow(article));
     pop.appendChild(buildPopoverContent(article, data));
 
     (document.body || document.documentElement).appendChild(pop);

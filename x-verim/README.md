@@ -169,6 +169,22 @@ içinde hazır yanıt taslakları oluyor.
 - ↻ yeniden üretiyor. Ekrandaki taslakları modele "bunları tekrarlama" diye geri
   gönderiyor, yani yeniden üretim *farklı açılar* demek, aynı cümlenin yeniden
   yazımı değil.
+- Kaynak tweetin altındaki kutu **yeniden üretimin yönünü** veriyor: `daha sert
+  ol`, `futbolla bağlantı kur`, `soru sorma` gibi bir satır yazıp `Enter`'a basmak
+  taslakları o yönde yeniden üretiyor. ↻ de kutuda ne yazıyorsa onu kullanıyor,
+  kutu boşken eskisi gibi sadece başka açılar deniyor.
+  - `a` bu kutuyu **hiç okumuyor** — ilk parti her zaman aynı ilk parti. Görmediğin
+    taslağa yön veremezsin, ve devreden kalmış bir not sonraki tweetin ilk
+    taslaklarını sessizce eğseydi daha kötü bir sürpriz olurdu. Aynı tweette
+    tekrar `a`'ya basmak kutuyu temizliyor.
+  - Yazdığın satır modele *taslakların yönü* olarak gidiyor, yeni bir görev
+    olarak değil: tepki listesini eziyor (üç taslağın tek düşünce olmamasını o
+    liste sağlıyordu, açık bir yön bunu daha iyi yapıyor) ama tek bir ses
+    kuralını ezmiyor. `daha resmi yaz` demek uzun tireleri geri satın almıyor.
+    Not asla taslağın içinde görünmüyor, yanıtlanmıyor, alıntılanmıyor.
+  - Kutunun içinde `a` / `j` / `k` / rakamlar kısayol değil, harf. `Esc` önce
+    kutudan çıkıyor, kartı kapatmıyor. Model çalışırken basılı tutulan `Enter`
+    ikinci bir istek açmıyor.
 - Kartın altında o çağrının **gerçek maliyeti** yazıyor. Günde elli kez
   tekrarlanan bir alışkanlığın fiyatı görünmez olmamalı.
 - **Tweet detay sayfasındayken**, tweetin altında görünen yanıtlar (en fazla 10
