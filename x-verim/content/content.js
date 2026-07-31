@@ -645,8 +645,18 @@
     if (el.isContentEditable) return true;
     return false;
   }
-  function isTypingTarget(t) {
-    return t && t.nodeType === 1 && isTyping(t);
+  // A text box you cannot see is a text box you are not typing in. X's home
+  // composer keeps focus after a single click, so scrolling past it used to send
+  // every shortcut into an off-screen field: the key did nothing and there was
+  // no way to tell why, until some later click happened to move focus. Focus in
+  // a *visible* field still wins the key, which is the part that has to hold.
+  function isLiveTyping(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (!isTyping(el)) return false;
+    if (!el.isConnected) return false;
+    var r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    return r.bottom > 0 && r.top < viewportH();
   }
 
   // Land the row straddling the same reading line pickFocused measures against.
@@ -702,6 +712,14 @@
   }
 
   function handleShortcut(action, focused) {
+    // React recycles timeline rows, so the active tweet can already have left
+    // the document by the time a key arrives. Drafting from a detached row read
+    // its text but anchored the card to a rect of zeroes; treat it as no
+    // selection so the prompt to pick one shows instead.
+    if (focused && !focused.isConnected) {
+      setFocus(null, null);
+      focused = null;
+    }
     if (action === "analyze" && !focused) {
       var navKeys = [SC.focusNext, SC.focusPrev].filter(Boolean).join(" / ").toUpperCase();
       showToast("Önce bir tweet seç" + (navKeys ? (" — " + navKeys + " ile gezinebilirsin.") : "."), { kind: "warn" });
@@ -738,7 +756,7 @@
 
   function onKeyDown(e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (isTypingTarget(e.target) || isTyping(document.activeElement)) return;
+    if (isLiveTyping(e.target) || isLiveTyping(document.activeElement)) return;
     // Scrolling by keyboard counts as scrolling away: the reading line takes
     // over again, exactly as it would after a wheel gesture.
     if (SCROLL_KEYS[e.key]) releaseExplicitFocus();
