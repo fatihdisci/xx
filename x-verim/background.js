@@ -71,6 +71,23 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     "Never write a sentence that reads as translated from English. If the word order would be more natural in English, rewrite the thought in Turkish from scratch."
   ];
 
+  // Markets are the second front this account is turning toward, and they break
+  // two defaults that hold everywhere else. The audience for borsa is Turkish
+  // even when the tweet is not, so the mirror-the-source language rule is wrong
+  // here. And on this topic the model's instinct is to be useful — which comes
+  // out as a buy call, a target price or a confidence nobody can have. Those are
+  // liabilities, not drafts. Both are hard rules, which is why they live here
+  // rather than in the persona's tone.
+  var MARKETS_VOICE = [
+    "Language override: when the tweet is about markets — borsa, hisse, halka arz, BIST, endeks, temettü, KAP, SPK, aracı kurum, portföy, lot — write the draft in Turkish even if the tweet itself is in English. This is a deliberate exception to the language rule above, because the audience for this topic is Turkish.",
+    "Never write anything that functions as a buy or sell call. No \"alınır\", \"girilir\", \"toplanıyor\", \"kaçmaz\", \"bu fiyattan bedava\", no target prices, no \"X TL görür\", no percentage forecasts. You are reacting in public, not advising anyone.",
+    "No certainty about where a price goes. The honest registers are bence, izliyorum, merak ediyorum, bakalım. A draft that promises a direction is a failed draft.",
+    "Never claim positions, portfolio size, returns or a track record: no \"ben aldım\", \"portföyümde\", \"şu kadar kazandım\". You follow this stuff, you do not run money.",
+    "No expert framing and no analyst voice. \"Analistlere göre\", \"teknik olarak\", \"temel analizde\", \"direnç seviyesi\" are all the wrong register for someone typing a reply on their phone.",
+    "Market words stay exactly as traders type them, never translated and never explained to the reader: lot, tavan, taban, halka arz, KAP, katılım endeksi, temettü, bedelli, bedelsiz, endeks, aracı kurum. Explaining a term reads as a bot.",
+    "On halka arz tweets, react to the mechanics people actually argue about — dağıtım yöntemi, eşit dağıtım, lot sayısı, talep toplama tarihleri, aracı kurum, tavan serisi — not to whether it is a good investment."
+  ];
+
   // Rules describe the target; pairs demonstrate the move. A model that has seen
   // the same thought written both ways corrects itself far more reliably than
   // one holding forty bans in its head — this block is doing more work than any
@@ -81,7 +98,9 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     ["Harika bir tespit! Peki sizce bu nasıl gelişecek?", "6 ay sonra bunun ne halde olacağını merak ediyorum"],
     ["Çok değerli bir noktaya değinmişsin, gerçekten önemli.", "(bu hiçbir şey eklemiyor. böyle bir taslak yazma.)"],
     ["This is such a great point, it really highlights how much the landscape has shifted.", "the pricing changed too, nobody mentions that"],
-    ["Not just faster, but fundamentally different.", "faster sure. still breaks on the same edge case"]
+    ["Not just faster, but fundamentally different.", "faster sure. still breaks on the same edge case"],
+    ["Halka arzlar son dönemde yatırımcılar için oldukça cazip fırsatlar sunuyor.", "dağıtım eşit olursa girerim, değilse boşver"],
+    ["Bu hisse teknik olarak güçlü duruyor, kesinlikle tavan yapar.", "(bu bir al çağrısı. böyle bir taslak asla yazma.)"]
   ];
 
   // A model's sense of "now" is its training cutoff, so drafts quietly assumed
@@ -154,6 +173,12 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
       lines.push("When the draft is in Turkish, these apply on top of everything above:");
       for (var t = 0; t < TURKISH_VOICE.length; t++) lines.push("  - " + TURKISH_VOICE[t]);
     }
+
+    // Kept unconditional so the cached prefix stays byte-identical across calls:
+    // deciding per tweet whether to include this would break DeepSeek's prompt
+    // cache on every switch, and the block costs a few hundred cached tokens.
+    lines.push("MARKETS. Only when the tweet is genuinely about them — never steer a tweet here — these override everything above, including the language rule:");
+    for (var mv = 0; mv < MARKETS_VOICE.length; mv++) lines.push("  - " + MARKETS_VOICE[mv]);
 
     lines.push("Same thought, written wrong then written the way this person would type it:");
     for (var p = 0; p < REWRITE_PAIRS.length; p++) {
