@@ -6,7 +6,7 @@ Safari'de çalışır, Web Store'a çıkmaz, sadece senin makinende durur.
 Ne yapar, kısaca:
 
 - **Klavyeyle gezinme** — `j` / `k` ile tweetler arasında, fareye dokunmadan
-- **Yanıt taslakları** — `a` ile, senin sesinde, tweetin kendi dilinde (DeepSeek üzerinden)
+- **Yanıt taslakları** — `a` ile, senin sesinde, tweetin kendi dilinde (OpenRouter üzerinden)
 - **Maliyet sayacı** — her taslağın gerçekte kaça mal olduğu, popup'ta
 - **Gönderi planlama** — yazdığın mesajları X'in kendi planlayıcısına kaydeder, bilgisayar kapalıyken bile paylaşılır
 
@@ -28,7 +28,7 @@ planlama varsayılan olarak **kapalıdır**.
 `aria-label` ile bulunur. CSS sınıf adları (`css-1dbjc4n` gibi) kullanılmaz,
 çünkü onlar her hafta değişir.
 
-**3. Telemetri yok.** Makinenden dışarı sadece şunlar çıkar: `api.deepseek.com`'a
+**3. Telemetri yok.** Makinenden dışarı sadece şunlar çıkar: `openrouter.ai`'a
 gönderdiğin tweet metni ve kişilik tanımın, bir de planlamayı açtıysan `x.com`'un
 kendi API'sine senin yazdığın gönderiler. Başka hiçbir yere hiçbir şey gitmez.
 
@@ -41,7 +41,9 @@ kendi API'sine senin yazdığın gönderiler. Başka hiçbir yere hiçbir şey g
 ### Chrome
 
 1. `config.example.js` dosyasını `config.js` olarak kopyala ve doldur:
-   - `DEEPSEEK_API_KEY` — DeepSeek API anahtarın
+   - `OPENROUTER_API_KEY` — OpenRouter API anahtarın
+   - Model seçimini eklenti popup'ındaki **Yanıt modeli** menüsünden yapabilirsin;
+     seçim tarayıcıda kaydedilir ve sonraki taslaklar OpenRouter üzerinden onunla üretilir.
    - `PERSONA.identity` / `niche` / `tone` — kim olduğun, ne hakkında yazdığın, nasıl konuştuğun
    - `PERSONA.samples` — **kalitede en büyük fark burada.** Gerçekten yazdığın
      birkaç tweet. Model bunların ritmini kopyalar, içeriğini asla.
@@ -249,13 +251,13 @@ söylüyor. En altta token dağılımı (giriş / önbellek / çıkış) ve kull
 fiyatlar duruyor.
 
 Bunların hiçbiri tahmin değil: `background.js` her yanıtın `usage` alanını okuyup
-`chrome.storage.local`'a yazıyor. DeepSeek üç ayrı fiyat uyguluyor ve önbellekten
+`chrome.storage.local`'a yazıyor. OpenRouter/model fiyatlarına göre üç ayrı fiyat alanı
 gelen giriş, ıskalayan girişten ~50 kat ucuz — tek bir karma sayı, sistem istemini
 tekrar tekrar gönderen bir oturumda (yani buradaki her oturumda) bir mertebe
 yanlış olurdu, o yüzden üçü ayrı tutuluyor.
 
 Bir taslak zaman tünelinde üretildiğinde popup açıksa toplam anında güncelleniyor.
-`sıfırla` sadece buradaki sayacı sıfırlıyor, DeepSeek'teki gerçek faturanı değil.
+`sıfırla` sadece buradaki sayacı sıfırlıyor, OpenRouter'daki gerçek faturanı değil.
 
 **Planlama** — aşağıda.
 
@@ -355,10 +357,10 @@ gidiyor ve başka hiçbir yere; arka plan onu döndüren bir mesaj bile tanımla
 
 ## Gizlilik
 
-- `DEEPSEEK_API_KEY` sadece `background.js` içinde okunuyor. İçerik betiklerine
+- `OPENROUTER_API_KEY` sadece `background.js` içinde okunuyor. İçerik betiklerine
   veya popup'a asla gönderilmiyor.
 - Dışarı giden ağ istekleri:
-  - `api.deepseek.com/chat/completions` — sadece sen `a`'ya bastığında
+  - `openrouter.ai/api/v1/chat/completions` — sadece sen `a`'ya bastığında
   - `x.com/i/api/graphql/…` — sadece planlama açıkken, senin yazdığın gönderiyi
     kaydetmek için
   - `abs.twimg.com` — sadece X'in işlem kimliği eskidiğinde, güncelini bulmak için
@@ -408,7 +410,7 @@ x-verim/
 ├── config.example.js          Şablon — config.js olarak kopyala
 ├── config.js                  Kişisel ayarlar — COMMIT EDİLMİYOR
 ├── planlama-60-gun.json       Kesin tarihli kişisel plan — COMMIT EDİLMİYOR
-├── background.js              DeepSeek çağrıları + sistem istemi + maliyet sayacı
+├── background.js              OpenRouter çağrıları + sistem istemi + maliyet sayacı
 ├── lib/x-dom.js               SELECTORS + DOM yardımcıları
 ├── lib/x-transaction.js       Planlama için X-Client-Transaction-Id üretimi
 ├── content/

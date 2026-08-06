@@ -7,7 +7,7 @@
   "host_permissions": [
     "https://x.com/*",
     "https://abs.twimg.com/*",
-    "https://api.deepseek.com/*"
+    "https://openrouter.ai/*"
   ],
   "background": {
     "service_worker": "background.js",

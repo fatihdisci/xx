@@ -209,6 +209,7 @@
     var rate = Number(pr.usdTry) || 0;
 
     $("model-tag").textContent = u.model || "kişisel";
+    $("model-select").value = u.model || "google/gemini-2.5-flash-lite";
     $("cost-total").textContent = fmtUsd(totals.usd) + fmtTry(totals.usd, rate);
     $("cost-sub").textContent = totals.calls
       ? (totals.calls + " taslak isteği · " + shortDate(u.since) + " tarihinden beri")
@@ -462,10 +463,26 @@
     loadSchedule();
 
     $("cost-reset").addEventListener("click", function () {
-      if (!window.confirm("Maliyet sayacı sıfırlanacak. DeepSeek'teki gerçek faturan değişmez, sadece buradaki toplam sıfırdan başlar. Devam?")) return;
+      if (!window.confirm("Maliyet sayacı sıfırlanacak. OpenRouter'daki gerçek faturan değişmez, sadece buradaki toplam sıfırdan başlar. Devam?")) return;
       bgRequest({ type: "RESET_USAGE" }).then(function () {
         loadUsage();
         setStatus("Sayaç sıfırlandı.", null, 2200);
+      });
+    });
+
+    $("model-select").addEventListener("change", function (event) {
+      var select = event.target;
+      var model = select.value;
+      select.disabled = true;
+      bgRequest({ type: "SET_OPENROUTER_MODEL", model: model }).then(function (resp) {
+        select.disabled = false;
+        if (!resp || !resp.ok) {
+          setStatus("Model seçimi kaydedilemedi" + (resp && resp.error ? ": " + resp.error : "."), "error", 0);
+          loadUsage();
+          return;
+        }
+        $("model-tag").textContent = (resp.data && resp.data.model) || model;
+        setStatus("Model seçildi. Yeni taslaklar bununla üretilecek.", null, 2200);
       });
     });
 

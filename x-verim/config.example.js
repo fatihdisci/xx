@@ -9,9 +9,9 @@
 
   root.XVERIM_CONFIG = {
     // ---- Model ----
-    DEEPSEEK_API_KEY: "PASTE_YOUR_KEY_HERE",
-    DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
-    DEEPSEEK_MODEL: "deepseek-v4-flash",
+    OPENROUTER_API_KEY: "PASTE_YOUR_KEY_HERE",
+    OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1",
+    OPENROUTER_MODEL: "google/gemini-2.5-flash-lite",
     AI_TEMPERATURE: 0.9,
     AI_FREQUENCY_PENALTY: 0.3, // keeps a batch of drafts from settling into one template; above 0.5 it starts mangling word choice
     AI_TIMEOUT_MS: 45000,      // give up on a stalled request instead of shimmering forever
@@ -53,14 +53,13 @@
     },
 
     // ---- Cost counter ----
-    // DeepSeek's published per-million-token rates, used to price the usage
-    // readout in the popup. Cached input is ~50x cheaper than a cache miss, so
-    // the three are tracked separately rather than blended.
+    // OpenRouter/model pricing, used to estimate the usage readout in the popup.
+    // Set these to the rates shown by OpenRouter for the selected model.
     // usdTry is optional: set it and the popup shows a ₺ figure next to the $.
     PRICING: {
-      inputPerMTok: 0.14,
-      cachedInputPerMTok: 0.0028,
-      outputPerMTok: 0.28,
+      inputPerMTok: 0,
+      cachedInputPerMTok: 0,
+      outputPerMTok: 0,
       usdTry: 0
     }
   };

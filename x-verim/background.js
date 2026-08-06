@@ -1,4 +1,4 @@
-// Background — only place that talks to api.deepseek.com.
+// Background — only place that talks to OpenRouter.
 // Routes AI_ANALYZE / GET_USAGE / RESET_USAGE from the content script and the
 // popup. The persona never leaves this file — it only feeds the system prompt.
 //
@@ -13,6 +13,40 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
   "use strict";
 
   var C = self.XVERIM_CONFIG || {};
+  var MODEL_KEY = "xverim_openrouter_model_v1";
+  var OPENROUTER_MODELS = [
+    "google/gemini-2.5-flash-lite",
+    "xiaomi/mimo-v2.5",
+    "openai/gpt-5.6-luna",
+    "tencent/hy3"
+  ];
+
+  function defaultModel() {
+    return C.OPENROUTER_MODEL || "google/gemini-2.5-flash-lite";
+  }
+  function selectedModel() {
+    return new Promise(function (resolve) {
+      try {
+        chrome.storage.local.get([MODEL_KEY], function (data) {
+          var model = data && data[MODEL_KEY];
+          resolve(OPENROUTER_MODELS.indexOf(model) >= 0 ? model : defaultModel());
+        });
+      } catch (_) {
+        resolve(defaultModel());
+      }
+    });
+  }
+  function saveSelectedModel(model) {
+    if (OPENROUTER_MODELS.indexOf(model) < 0) {
+      return Promise.reject(new Error("Desteklenmeyen OpenRouter modeli"));
+    }
+    return new Promise(function (resolve) {
+      var data = {};
+      data[MODEL_KEY] = model;
+      try { chrome.storage.local.set(data, function () { resolve(model); }); }
+      catch (_) { resolve(model); }
+    });
+  }
 
   // -------- System prompt --------
   // One job now: reply drafts for a tweet you just read. Everything here exists
@@ -175,7 +209,7 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     }
 
     // Kept unconditional so the cached prefix stays byte-identical across calls:
-    // deciding per tweet whether to include this would break DeepSeek's prompt
+    // deciding per tweet whether to include this would break the provider's prompt
     // cache on every switch, and the block costs a few hundred cached tokens.
     lines.push("MARKETS. Only when the tweet is genuinely about them — never steer a tweet here — these override everything above, including the language rule:");
     for (var mv = 0; mv < MARKETS_VOICE.length; mv++) lines.push("  - " + MARKETS_VOICE[mv]);
@@ -192,13 +226,13 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
   }
 
   // -------- Token accounting --------
-  // DeepSeek bills three ways and the cached rate is 50x cheaper than a miss, so
+  // OpenRouter usage can expose cached and uncached input separately, so
   // a single blended number would be wrong by an order of magnitude on a session
   // that reuses the same system prompt — which is every session here.
   var PRICE_DEFAULT = {
-    inputPerMTok: 0.14,        // cache miss
-    cachedInputPerMTok: 0.0028,
-    outputPerMTok: 0.28
+    inputPerMTok: 0,
+    cachedInputPerMTok: 0,
+    outputPerMTok: 0
   };
   function pricing() {
     var p = C.PRICING || {};
@@ -254,7 +288,7 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     });
   }
 
-  // DeepSeek reports the cache split in its own fields; OpenAI-compatible
+  // OpenRouter reports the cache split in its own fields; OpenAI-compatible
   // proxies only fill prompt_tokens_details.cached_tokens. Read whichever
   // arrived, and never let the miss count go negative on a partial payload.
   function readUsage(raw) {
@@ -267,13 +301,14 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     if (!(miss >= 0)) miss = Math.max(0, promptTok - cached);
     var out = Number(u.completion_tokens) || 0;
     var pr = pricing();
+    var providerCost = Number(u.cost);
     return {
       cachedTok: cached,
       missTok: miss,
       outTok: out,
-      usd: (miss / 1e6) * pr.inputPerMTok
+      usd: providerCost >= 0 ? providerCost : ((miss / 1e6) * pr.inputPerMTok
          + (cached / 1e6) * pr.cachedInputPerMTok
-         + (out / 1e6) * pr.outputPerMTok
+         + (out / 1e6) * pr.outputPerMTok)
     };
   }
 
@@ -291,7 +326,7 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     }).catch(function () {});
   }
 
-  // -------- DeepSeek API call --------
+  // -------- OpenRouter API call --------
   // A raw provider error body in a 340px popover is unreadable. Map the codes
   // that actually happen to one short line, and keep the body only as a tail
   // for the cases nobody anticipated.
@@ -305,16 +340,17 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
     return "API " + status + (short ? ": " + short : "");
   }
 
-  async function deepseek(messages, opts) {
+  async function openrouter(messages, opts) {
     var o = opts || {};
-    var key = C.DEEPSEEK_API_KEY;
+    var model = await selectedModel();
+    var key = C.OPENROUTER_API_KEY;
     if (!key || key === "PASTE_YOUR_KEY_HERE") {
-      throw new Error("config.js içinde DEEPSEEK_API_KEY tanımlı değil");
+      throw new Error("config.js içinde OPENROUTER_API_KEY tanımlı değil");
     }
-    var base = (C.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1").replace(/\/+$/, "");
+    var base = (C.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
     var url = base + "/chat/completions";
     var body = {
-      model: C.DEEPSEEK_MODEL || "deepseek-v4-flash",
+      model: model,
       messages: messages,
       temperature: typeof o.temperature === "number" ? o.temperature : (C.AI_TEMPERATURE != null ? C.AI_TEMPERATURE : 0.8),
       // Prompt rules alone do not stop a batch from settling into one template —
@@ -335,7 +371,9 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer " + key
+          "Authorization": "Bearer " + key,
+          "HTTP-Referer": "https://x.com/",
+          "X-Title": "X Verim"
         },
         body: JSON.stringify(body),
         signal: controller ? controller.signal : undefined
@@ -478,7 +516,7 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
              + avoidClause(p.previous)
              + steerClause(p.steer) + "\n"
              + 'Return JSON: {"replies": [{"text": "...", "translation": "..."}, ...]} with ' + replyCount + ' items.';
-    var out = await deepseek(
+    var out = await openrouter(
       [{ role: "system", content: sys }, { role: "user", content: user }],
       { json: true, temperature: C.AI_TEMPERATURE != null ? C.AI_TEMPERATURE : 0.9 }
     );
@@ -521,9 +559,14 @@ if (typeof self.XVERIM_CONFIG === "undefined" && typeof importScripts === "funct
             days: u.days,
             last: u.last || null,
             since: u.since,
-            model: C.DEEPSEEK_MODEL || "deepseek-v4-flash",
+            model: await selectedModel(),
+            models: OPENROUTER_MODELS,
             pricing: pr
           } });
+        }
+        if (msg.type === "SET_OPENROUTER_MODEL") {
+          var model = await saveSelectedModel(String(msg.model || ""));
+          return sendResponse({ ok: true, data: { model: model } });
         }
         if (msg.type === "RESET_USAGE") {
           await saveUsage({ totals: emptyBucket(), days: {}, since: Date.now() });
