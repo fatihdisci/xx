@@ -1,4 +1,4 @@
-// Generates the X-Client-Transaction-Id header required by X's web API.
+﻿// Generates the X-Client-Transaction-Id header required by X's web API.
 //
 // Adapted for a browser content script from x-client-transaction-id 0.3.1:
 // https://github.com/Lqm1/x-client-transaction-id

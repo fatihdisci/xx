@@ -1,4 +1,4 @@
-// X Verim page-world bridge. This file intentionally runs in X's MAIN world:
+﻿// X Verim page-world bridge. This file intentionally runs in X's MAIN world:
 // Safari/WebKit does not reliably deliver synthetic clipboard/input events from
 // an isolated extension world to React's delegated event system.
 //

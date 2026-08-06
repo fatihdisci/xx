@@ -1,4 +1,4 @@
-// Copy this file to config.js and fill it in. config.js is gitignored — the
+﻿// Copy this file to config.js and fill it in. config.js is gitignored — the
 // key stays on your machine. Both worlds read the same object: the background
 // service worker via self.XVERIM_CONFIG, the content script via window.
 //

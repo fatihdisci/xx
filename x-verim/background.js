@@ -1,4 +1,4 @@
-// Background — only place that talks to OpenRouter.
+﻿// Background — only place that talks to OpenRouter.
 // Routes AI_ANALYZE / GET_USAGE / RESET_USAGE from the content script and the
 // popup. The persona never leaves this file — it only feeds the system prompt.
 //
